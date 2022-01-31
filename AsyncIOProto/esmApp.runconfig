@@ -1,0 +1,48 @@
+###############################################
+####  esmApp Run-Time Configuration File  #####
+###############################################
+
+atm_petlist_bounds:   0   1
+ocn_petlist_bounds:   0   1
+io_petlist_bounds:    2   3
+grid_dims:          200 300
+
+time_step:  600
+start_time: 2010 06 01 0 0 0
+stop_time:  2010 06 01 1 0 0
+
+# Encoding a simple run sequence
+runSeq::
+    @1800         # 30 minute output
+      ATM -> IO :remapMethod=redist
+      IO output
+      @600        # 10 minute coupling
+        ATM -> OCN
+        OCN -> ATM
+        ATM
+        OCN
+      @
+    @
+::
+
+# Attributes for components
+
+driverAttributes::
+  Verbosity = 1
+  Profiling = 0
+::
+
+atmAttributes::
+  Verbosity = 1
+  Diagnostic = 0
+::
+
+ocnAttributes::
+  Verbosity = 1
+  Diagnostic = 0
+::
+
+ioAttributes::
+  Verbosity = 1
+  Diagnostic = 0
+::
