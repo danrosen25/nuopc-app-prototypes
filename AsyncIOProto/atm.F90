@@ -252,6 +252,7 @@ module ATM
     type(ESMF_Time)               :: time
     type(ESMF_Field)              :: field
     logical                       :: isUpdated
+    integer                       :: count
 
     rc = ESMF_SUCCESS
 
@@ -314,10 +315,36 @@ module ATM
         return  ! bail out
     endif
 
+    ! importable field: sea_surface_salinity
+    call ESMF_StateGet(importState,itemSearch="sss", itemCount=count, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (count .ge. 1) then
+      call ESMF_StateGet(importState, field=field, itemName="sss", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      call ESMF_FieldFill(field, dataFillScheme="const", &
+        const1=0.0_ESMF_KIND_R8, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+    end if
+
     ! the "pmsl" Field can be initialized without depending on "sst"
     ! -> set Updated Field Attribute to "true", indicating to the IPDv02p5
     ! generic code to set the timestamp for this Field
     call ESMF_StateGet(exportState, field=field, itemName="pmsl", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call ESMF_FieldFill(field, dataFillScheme="const", &
+      const1=0.0_ESMF_KIND_R8, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -405,11 +432,25 @@ module ATM
     integer, intent(out) :: rc
 
     ! local variables
+    type(ESMF_VM)               :: vm
+    integer                     :: localPet
     type(ESMF_Clock)            :: clock
     type(ESMF_State)            :: importState, exportState
     character(len=160)          :: msgString
+    type(ESMF_Field)            :: field
+    real(ESMF_KIND_R8), pointer :: farrayPtr(:,:)
+    real(ESMF_KIND_R8), save    :: slice=1.0_ESMF_KIND_R8
+    integer                     :: count
+    real(ESMF_KIND_R8)          :: lclSum(1), gblSum(1)
 
     rc = ESMF_SUCCESS
+
+    ! query the Component for its vm
+    call ESMF_GridCompGet(model, vm=vm, localPet=localPet, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     ! query for clock, importState and exportState
     call NUOPC_ModelGet(model, modelClock=clock, importState=importState, &
@@ -449,6 +490,49 @@ module ATM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+    ! exportable field: air_pressure_at_sea_level
+    call ESMF_StateGet(exportState, field=field, itemName="pmsl", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call ESMF_FieldFill(field, dataFillScheme="const", const1=slice, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    slice = slice + 1.0_ESMF_KIND_R8
+
+    ! importable field: sea_surface_salinity
+    call ESMF_StateGet(importState,itemSearch="sss", itemCount=count, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    if (count .ge. 1) then
+      call ESMF_StateGet(importState, field=field, itemName="sss", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      call ESMF_FieldGet(field, farrayPtr=farrayPtr, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      lclSum(1) = SUM(farrayPtr(:,:))
+      call ESMF_VMReduce(vm, lclSum, gblSum, &
+        reduceflag=ESMF_REDUCE_SUM, count=1, rootPet=0, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, &
+        file=__FILE__)) &
+        return  ! bail out
+      if (localPet.eq.0) then
+        write (*,"(A,F0.1)") "ATM - sea_surface_salinity from IO SUM=", &
+          gblSum(1)
+      endif
+    end if
 
   end subroutine
 
