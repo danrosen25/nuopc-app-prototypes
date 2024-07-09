@@ -1,0 +1,6 @@
+application:
+  link_packages: OpenMP
+
+components:
+
+  GenIO:
