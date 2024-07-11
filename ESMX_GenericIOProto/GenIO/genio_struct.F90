@@ -15,30 +15,40 @@ module genio_mod_struct
   !-----------------------------------------------------------------------------
 
   use ESMF
-  use genio_mod_param
 
   implicit none
 
   private
 
+  ! parameters
+  public GENIO_FILV
+  public GENIO_FCTRL_DISABLED
+  public GENIO_FCTRL_OPTIONAL
+  public GENIO_FCTRL_REQUIRED
+  ! data structures
   public genio_field
   public genio_state
   public geniostate_wrap
 
-  ! derived types
+  ! parameters
+  real(ESMF_KIND_R8), parameter :: GENIO_FILV = -1.0E34_ESMF_KIND_R8
+  integer,  parameter ::       &
+    GENIO_FCTRL_DISABLED = -1, &
+    GENIO_FCTRL_OPTIONAL =  0, &
+    GENIO_FCTRL_REQUIRED =  1
+
   type genio_field
     character(len=64)           :: stdn        = "dummy"
-    real(ESMF_KIND_R8)          :: dflt        = filv
-    integer                     :: prio        = p_optional
+    real(ESMF_KIND_R8)          :: dflt        = GENIO_FILV
     logical                     :: rlze        = .false.
     integer                     :: fdim        = 2
-    real(ESMF_KIND_R8)          :: lmin(1)     = filv
-    real(ESMF_KIND_R8)          :: gmin(1)     = filv
-    real(ESMF_KIND_R8)          :: lmax(1)     = filv
-    real(ESMF_KIND_R8)          :: gmax(1)     = filv
-    real(ESMF_KIND_R8)          :: lsum(2)     = filv
-    real(ESMF_KIND_R8)          :: gsum(2)     = filv
-    real(ESMF_KIND_R8)          :: gavg        = filv
+    real(ESMF_KIND_R8)          :: lmin(1)     = GENIO_FILV
+    real(ESMF_KIND_R8)          :: gmin(1)     = GENIO_FILV
+    real(ESMF_KIND_R8)          :: lmax(1)     = GENIO_FILV
+    real(ESMF_KIND_R8)          :: gmax(1)     = GENIO_FILV
+    real(ESMF_KIND_R8)          :: lsum(2)     = GENIO_FILV
+    real(ESMF_KIND_R8)          :: gsum(2)     = GENIO_FILV
+    real(ESMF_KIND_R8)          :: gavg        = GENIO_FILV
     type(ESMF_Field), pointer   :: efld        => null()
     real(ESMF_KIND_R8), pointer :: ptr2(:,:)   => null()
     real(ESMF_KIND_R8), pointer :: ptr3(:,:,:) => null()

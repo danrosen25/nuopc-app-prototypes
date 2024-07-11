@@ -23,7 +23,7 @@ ATM:
   model:            ESMX_Data   # use the ESMX data component
   ompNumThreads:    4
   attributes:
-    Verbosity:  low
+    Verbosity:  0
   petList:          [0-2]  # petList is list of scalars and lists.
                                 # each list again can be of scalars and lists
                                 # recursively.
@@ -37,7 +37,7 @@ ATM:
     coordSys: ESMF_COORDSYS_CART
 
   exportFields:
-    air_pressure_at_sea_level:            {dim: 2, val: 2.5}
+    surface_downward_water_flux:          {dim: 2, val: 2.5}
     precipitation_flux:                   {dim: 2, val: 3.5}
     surface_net_downward_shortwave_flux:  {dim: 3, val: 4.5}
 
@@ -51,3 +51,7 @@ IO:
     Verbosity:  low
   output:
     write_final: true
+  fieldOptions:
+    air_pressure_at_sea_level:            {control: optional}
+    precipitation_flux:                   {control: required}
+    surface_net_downward_shortwave_flux:  {control: disabled}

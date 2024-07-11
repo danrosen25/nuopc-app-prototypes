@@ -18,7 +18,6 @@ module genio
   use NUOPC
   use NUOPC_Model, &
     modelSS    => SetServices
-  use genio_mod_param
   use genio_mod_struct
   use genio_mod_util
   use genio_mod_config
@@ -148,7 +147,7 @@ module genio
                     "attributes   ", &  ! ESMX_Driver handled option
                     "output       ", &  ! GenIO handled option
                     "geom         ", &  ! GenIO handled option
-                    "fieldsOptions"  &  ! GenIO handled option
+                    "fieldOptions "  &  ! GenIO handled option
                    ], badKey=badKey, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return  ! bail out
@@ -502,8 +501,9 @@ module genio
     type(genio_state), pointer :: geniostate
     type(genio_field), pointer :: iofield
     type(ESMF_Clock)           :: modelClock
+    type(ESMF_Time)            :: currTime
     type(ESMF_State)           :: importState
-    character(len=160)         :: clockString
+    character(len=160)         :: timeString
 
     rc = ESMF_SUCCESS
 
@@ -531,38 +531,25 @@ module genio
       importState=importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_ClockPrint(modelClock, options="currTime", &
-      unit=clockString, rc=rc)
+    call ESMF_ClockGet(modelClock, currTime=currTime, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_TimeGet(currTime, timeString=timeString, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! write field state
+    call io_comp_field_write(geniostate, &
+      fileName=trim(geniostate%cname)//"_"//trim(timeString)//".nc", &
+      rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     if (geniostate%verbosity .gt. 0) then
-      ! write to standard out
-      if (geniostate%myid .eq. geniostate%outid) then
-        write(*,'(A,X,A)') trim(geniostate%cname)//": Model Advance",trim(clockString)
-      endif
-
-      ! sum import data from all PETs
-      iofield => geniostate%imp_flds_head
-      if (geniostate%myid .eq. geniostate%outid) then
-        write(*,'(A)') trim(geniostate%cname)//": Import Fields"
-        write(*,'(A,X,A25,X,A9,3(X,A9))') &
-          trim(geniostate%cname)//":", "FIELD", &
-          "COUNT", "MEAN", &
-          "MIN", "MAX"
-      endif
-      do while (associated(iofield))
-        call io_comp_field_diagnostics(geniostate, iofield, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        if (geniostate%myid .eq. geniostate%outid) then
-          write(*,'(A,X,A25,X,I9,3(X,E9.2))') &
-            trim(geniostate%cname)//":", trim(iofield%stdn), &
-            int(iofield%gsum(2)), iofield%gavg, &
-            iofield%gmin(1), iofield%gmax(1)
-        endif
-        iofield => iofield%nfld
-      enddo
+      call io_comp_field_diagnostics(geniostate, label="Model Advance", &
+        timeString=timeString, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
     endif ! diagnostic
 
   endsubroutine ModelAdvance
@@ -579,11 +566,9 @@ module genio
     type(genio_state), pointer :: geniostate
     type(genio_field), pointer :: iofield
     type(ESMF_Clock)           :: modelClock
+    type(ESMF_Time)            :: currTime
     type(ESMF_State)           :: importState
-    character(len=160)         :: clockString
-    integer                    :: fc
-    type(ESMF_Field), pointer  :: fl(:)
-    type(ESMF_FieldBundle)     :: fb
+    character(len=160)         :: timeString
     character(ESMF_MAXSTR)     :: fieldName
 
     rc = ESMF_SUCCESS
@@ -612,63 +597,27 @@ module genio
       importState=importState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call ESMF_ClockPrint(modelClock, options="currTime", &
-      unit=clockString, rc=rc)
+    call ESMF_ClockGet(modelClock, currTime=currTime, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_TimeGet(currTime, timeString=timeString, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     if (geniostate%verbosity .gt. 0) then 
-      ! write to standard out
-      if (geniostate%myid .eq. geniostate%outid) then
-        write(*,'(A,X,A)') trim(geniostate%cname)//": Model Finalize",trim(clockString)
-      endif
-          
-      ! sum import data from all PETs
-      iofield => geniostate%imp_flds_head
-      if (geniostate%myid .eq. geniostate%outid) then
-        write(*,'(A)') trim(geniostate%cname)//": Import Fields"
-        write(*,'(A,X,A25,X,A9,3(X,A9))') &
-          trim(geniostate%cname)//":", "FIELD", &
-          "COUNT", "MEAN", &
-          "MIN", "MAX"
-      endif
-      do while (associated(iofield))
-        call io_comp_field_diagnostics(geniostate, iofield, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        if (geniostate%myid .eq. geniostate%outid) then
-          write(*,'(A,X,A25,X,I9,3(X,E9.2))') &
-            trim(geniostate%cname)//":", trim(iofield%stdn), &
-            int(iofield%gsum(2)), iofield%gavg, &
-            iofield%gmin(1), iofield%gmax(1)
-        endif
-        iofield => iofield%nfld                 
-      enddo
-    endif ! diagnostic
-
-    ! write final import and export states
-    if (geniostate%write_final) then
-      call NUOPC_GetStateMemberCount(importState, fieldCount=fc, rc=rc)
+      call io_comp_field_diagnostics(geniostate, label="Model Finalize", &
+        timeString=timeString, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      if (fc .gt. 0) then
-        nullify(fl)
-        call NUOPC_GetStateMemberLists(importState, fieldList=fl, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        fb = ESMF_FieldBundleCreate(fieldList=fl, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        call ESMF_FieldBundleWrite(fb, &
-          fileName=trim(geniostate%cname)//"_final_import.nc", &
-          overwrite=.true., rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        call ESMF_FieldBundleDestroy(fb, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        deallocate(fl)
-      endif
+    endif ! diagnostic
+
+    ! write final field state
+    if (geniostate%write_final) then
+      call io_comp_field_write(geniostate, &
+        fileName=trim(geniostate%cname)//"_FINALIZE.nc", &
+        rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
     endif
 
     ! remove import fields from importState and destroy

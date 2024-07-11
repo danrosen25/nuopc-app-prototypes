@@ -15,7 +15,7 @@ module genio_mod_util
   !-----------------------------------------------------------------------------
 
   use ESMF
-  use genio_mod_param
+  use genio_mod_struct
 
   implicit none
 
@@ -25,7 +25,7 @@ module genio_mod_util
   public genio_hconfig2r8
   public genio_hconfig2str
   public genio_hconfig2logical
-  public genio_hconfig2priority
+  public genio_hconfig2control
 
   contains
 
@@ -201,9 +201,9 @@ module genio_mod_util
 
   !-----------------------------------------------------------------------------
 
-  function genio_hconfig2priority(hconfig, defaultValue, rc)
+  function genio_hconfig2control(hconfig, defaultValue, rc)
     ! return value
-    integer :: genio_hconfig2priority
+    integer :: genio_hconfig2control
     ! arguments
     type(ESMF_HConfig), intent(in) :: hconfig
     integer, intent(in), optional  :: defaultValue
@@ -215,20 +215,19 @@ module genio_mod_util
 
     rc = ESMF_SUCCESS
 
-    genio_hconfig2priority = p_optional
+    genio_hconfig2control = GENIO_FCTRL_OPTIONAL
 
-    isPresent = ESMF_HConfigIsDefined(hconfig, keyString="priority", rc=rc)
+    isPresent = ESMF_HConfigIsDefined(hconfig, keyString="control", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     if (isPresent) then
-      strValue = ESMF_HConfigAsString(hconfig, keyString="priority", &
-        asOkay=check, rc=rc)
+      strValue = ESMF_HConfigAsString(hconfig, keyString="control", asOkay=check, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       if (.not.check) then
         call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-          msg="GENIO: Field priority cannot be converted to String", &
+          msg="GENIO: Field control cannot be converted to String", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
@@ -237,20 +236,20 @@ module genio_mod_util
         line=__LINE__, file=__FILE__)) return
       select case (strValue)
         case ("disabled","off")
-          genio_hconfig2priority = p_disabled
-        case ("required","on")
-          genio_hconfig2priority = p_required
+          genio_hconfig2control = GENIO_FCTRL_DISABLED
         case ("optional")
-          genio_hconfig2priority = p_optional
+          genio_hconfig2control = GENIO_FCTRL_OPTIONAL
+        case ("required","on")
+          genio_hconfig2control = GENIO_FCTRL_REQUIRED
         case default 
           call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-            msg="GENIO: Field priority is invalid - "//trim(strValue), &
+            msg="GENIO: Field control is invalid - "//trim(strValue), &
             line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endselect
       deallocate(strValue)
     elseif (present(defaultValue)) then
-      genio_hconfig2priority = p_optional
+      genio_hconfig2control = defaultValue
     else
       call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
         msg="GENIO: Field priroty not found", &
@@ -258,7 +257,7 @@ module genio_mod_util
       return
     endif
 
-  endfunction genio_hconfig2priority
+  endfunction genio_hconfig2control
 
   !-----------------------------------------------------------------------------
 

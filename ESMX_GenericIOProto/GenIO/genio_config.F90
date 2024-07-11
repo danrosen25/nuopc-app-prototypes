@@ -15,7 +15,6 @@ module genio_mod_config
   !-----------------------------------------------------------------------------
 
   use ESMF
-  use genio_mod_param
   use genio_mod_struct
   use genio_mod_util
 

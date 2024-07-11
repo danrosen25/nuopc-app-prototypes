@@ -29,8 +29,7 @@ add_library(GenIO genio.F90
                   genio_geom.F90
                   genio_config.F90
                   genio_util.F90
-                  genio_struct.F90
-                  genio_param.F90)
+                  genio_struct.F90)
 target_link_libraries(GenIO PUBLIC ESMF)
 target_link_libraries(GenIO PUBLIC OpenMP::OpenMP_Fortran)
 
