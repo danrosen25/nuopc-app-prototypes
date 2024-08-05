@@ -17,7 +17,7 @@ module genio
   use ESMF
   use NUOPC
   use NUOPC_Model, &
-    modelSS    => SetServices
+    modelSS => SetServices
   use genio_mod_struct
   use genio_mod_util
   use genio_mod_config
@@ -117,6 +117,7 @@ module genio
       line=__LINE__, file=__FILE__)) return
 
     ! query component for vm and local pet
+    geniostate%outid = 0
     call ESMF_GridCompGet(genio, vm=geniostate%vm, &
       localPet=geniostate%myid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -175,7 +176,6 @@ module genio
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
     type(ESMF_State)           :: importState
-    type(genio_field), pointer :: iofield => null()
 
     rc = ESMF_SUCCESS
 
@@ -222,7 +222,13 @@ module genio
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
     type(ESMF_State)           :: importState
-    type(ESMF_Field)           :: field
+    logical                    :: outpcfg_p
+    logical                    :: geomcfg_p
+    logical                    :: flstcfg_p
+    type(ESMF_HConfig)         :: outpcfg
+    type(ESMF_HConfig)         :: geomcfg
+    type(ESMF_HConfig)         :: flstcfg
+    character(256)             :: errmsg
 
     rc = ESMF_SUCCESS
 
@@ -250,19 +256,70 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! get configuration information
+    ! check configuration information
     if (geniostate%cfgPresent) then
-      call io_comp_read_output(geniostate, rc=rc)
+      outpcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
+        keyString="output", rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      call io_comp_read_geom(geniostate, rc=rc)
+      geomcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
+        keyString="geom", rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      call io_comp_add_fields(importstate, geniostate, rc=rc)
+      flstcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
+        keyString="fieldOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      outpcfg_p = .false.
+      geomcfg_p = .false.
+      flstcfg_p = .false.
+    endif
+
+    ! geometry configuration
+    if (geomcfg_p) then
+      allocate(geniostate%geolst(1), stat=stat)
+      if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+        msg='GENIO: Memory allocation failed.', &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)) return
+      geomcfg = ESMF_HConfigCreateAt(geniostate%cfg, &
+        keyString="geom", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      geniostate%geolst(1) = genio_geom_create(geomcfg, errmsg, rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_HConfigDestroy(geomcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      allocate(geniostate%geolst(0), stat=stat)
+      if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+        msg='GENIO: Memory allocation failed.', &
+        line=__LINE__, &
+        file=__FILE__, &
+        rcToReturn=rc)) return
+    endif
+    ! field configuration
+    if (flstcfg_p) then
+      flstcfg = ESMF_HConfigCreateAt(geniostate%cfg, &
+        keyString="fieldOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      geniostate%srclst = genio_fldlst_create(importstate, flstcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_HConfigDestroy(flstcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      geniostate%srclst = genio_fldlst_create(importstate, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     endif
-    
+
   end subroutine ModifyAdvertised
 
   !-----------------------------------------------------------------------------
@@ -276,7 +333,7 @@ module genio
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
     type(ESMF_State)           :: importState
-    type(genio_field), pointer :: iofield
+    integer                    :: i
 
     rc = ESMF_SUCCESS
 
@@ -304,23 +361,13 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! create grid
-    geniostate%grid = ESMF_GridCreateNoPeriDimUfrm( &
-      name=trim(geniostate%cname)//"_grid", &
-      minIndex=(/1, 1/), maxIndex=(/geniostate%nx, geniostate%ny/), &
-      minCornerCoord=(/geniostate%minx,geniostate%miny/), &
-      maxCornerCoord=(/geniostate%maxx,geniostate%maxy/), &
-      staggerLocList=(/ESMF_STAGGERLOC_CENTER, ESMF_STAGGERLOC_CORNER/), &
-      coordSys=geniostate%coordSys, &
-      rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-
     ! write grid to NetCDF file
     if (btest(geniostate%diagnostic,16)) then
-      call io_comp_grid_diag(geniostate, trim(geniostate%cname)//"_grid.nc", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
+      do i=1, size(geniostate%geolst)
+        call genio_geom_write(geniostate%geolst(i), rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      enddo
     endif
 
   endsubroutine RealizeProvided
@@ -336,7 +383,6 @@ module genio
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
     type(ESMF_State)           :: importState
-    type(genio_field), pointer :: iofield
 
     rc = ESMF_SUCCESS
 
@@ -365,13 +411,9 @@ module genio
       line=__LINE__, file=__FILE__)) return
 
     ! realize import fields
-    iofield => geniostate%imp_flds_head
-    do while (associated(iofield))
-      call io_comp_realize_field(geniostate, iofield, importState, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      iofield => iofield%nfld
-    enddo
+    call genio_fldlst_realize(importState, geniostate%srclst, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
   endsubroutine RealizeAccepted
 
@@ -385,8 +427,8 @@ module genio
     integer                    :: stat
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
-    type(genio_field), pointer :: iofield
     type(ESMF_State)           :: importState
+    integer                    :: i
 
     rc = ESMF_SUCCESS
 
@@ -414,17 +456,9 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! reset import fields
-    iofield => geniostate%imp_flds_head
-    do while (associated(iofield))
-      if (iofield%rlze) then
-        call ESMF_FieldFill(iofield%efld, dataFillScheme="const", &
-          const1=iofield%dflt, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-      endif
-      iofield => iofield%nfld
-    enddo
+    call genio_fldlst_reset(geniostate%srclst, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     call NUOPC_CompAttributeSet(genio, &
       name="InitializeDataComplete", value="true", rc=rc)
@@ -499,7 +533,6 @@ module genio
     integer                    :: stat
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
-    type(genio_field), pointer :: iofield
     type(ESMF_Clock)           :: modelClock
     type(ESMF_Time)            :: currTime
     type(ESMF_State)           :: importState
@@ -539,18 +572,19 @@ module genio
       line=__LINE__, file=__FILE__)) return
 
     ! write field state
-    call io_comp_field_write(geniostate, &
+    call genio_fldlst_write(geniostate%srclst, &
       fileName=trim(geniostate%cname)//"_"//trim(timeString)//".nc", &
       rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     if (geniostate%verbosity .gt. 0) then
-      call io_comp_field_diagnostics(geniostate, label="Model Advance", &
-        timeString=timeString, rc=rc)
+      call genio_fldlst_diagnostics(geniostate%srclst, myid=geniostate%myid, &
+        outid=geniostate%outid, vm=geniostate%vm, cname=geniostate%cname, &
+        label="ModelAdvance", timeString=timeString, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-    endif ! diagnostic
+    endif
 
   endsubroutine ModelAdvance
 
@@ -564,12 +598,11 @@ module genio
     integer                    :: stat
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
-    type(genio_field), pointer :: iofield
     type(ESMF_Clock)           :: modelClock
     type(ESMF_Time)            :: currTime
     type(ESMF_State)           :: importState
     character(len=160)         :: timeString
-    character(ESMF_MAXSTR)     :: fieldName
+    integer                    :: i
 
     rc = ESMF_SUCCESS
 
@@ -604,54 +637,37 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    if (geniostate%verbosity .gt. 0) then 
-      call io_comp_field_diagnostics(geniostate, label="Model Finalize", &
-        timeString=timeString, rc=rc)
+    if (geniostate%verbosity .gt. 0) then
+      call genio_fldlst_diagnostics(geniostate%srclst, myid=geniostate%myid, &
+        outid=geniostate%outid, vm=geniostate%vm, cname=geniostate%cname, &
+        label="ModelFinalize", timeString=timeString, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     endif ! diagnostic
 
-    ! write final field state
-    if (geniostate%write_final) then
-      call io_comp_field_write(geniostate, &
-        fileName=trim(geniostate%cname)//"_FINALIZE.nc", &
-        rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    endif
-
-    ! remove import fields from importState and destroy
-    do while (associated(geniostate%imp_flds_head))
-      iofield => geniostate%imp_flds_head
-      geniostate%imp_flds_head => iofield%nfld
-      call ESMF_FieldGet(iofield%efld, name=fieldName, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_StateRemove(importState, (/fieldName/), rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_FieldDestroy(iofield%efld, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      deallocate(iofield, stat=stat)
-      if (ESMF_LogFoundDeallocError(statusToCheck=stat, &
-        msg=trim(geniostate%cname)//': Memory deallocation failed.', &
-        line=__LINE__, &
-        file=__FILE__, &
-        rcToReturn=rc)) return
-      nullify(iofield)
-    enddo
-    geniostate%imp_flds_tail => null()
-
-    ! destroy grid
-    call ESMF_GridDestroy(geniostate%grid, rc=rc)
+    call genio_fldlst_write(geniostate%srclst, &
+      fileName=trim(geniostate%cname)//"_ModelFinalize.nc", &
+      rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! destroy config
-    call ESMF_HConfigDestroy(geniostate%cfg, rc=rc)
+    call genio_fldlst_remove(importState, geniostate%srclst, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    call genio_fldlst_destroy(geniostate%srclst, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    do i=1, size(geniostate%geolst)
+      call genio_geom_destroy(geniostate%geolst(i), rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
+    enddo
+
+    call ESMF_HConfigDestroy(geniostate%cfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
     geniostate%cfgPresent = .false.
 
     deallocate(is%ptr, stat=stat)

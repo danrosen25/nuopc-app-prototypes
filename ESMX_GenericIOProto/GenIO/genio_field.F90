@@ -23,10 +23,46 @@ module genio_mod_field
 
   private
 
-  public io_comp_add_fields
-  public io_comp_realize_field
-  public io_comp_field_diagnostics
-  public io_comp_field_write
+  public genio_fldlst_create
+  public genio_fldlst_destroy
+  public genio_fldlst_realize
+  public genio_fldlst_remove
+  public genio_fldlst_zero
+  public genio_fldlst_reset
+  public genio_fldlst_diagnostics
+  public genio_fldlst_write
+
+  interface genio_fldlst_create
+    module procedure genio_srclst_create
+  end interface
+
+  interface genio_fldlst_destroy
+    module procedure genio_srclst_destroy
+  end interface
+
+  interface genio_fldlst_realize
+    module procedure genio_srclst_realize
+  end interface
+
+  interface genio_fldlst_remove
+    module procedure genio_srclst_remove
+  end interface
+
+  interface genio_fldlst_zero
+    module procedure genio_srclst_zero
+  end interface
+
+  interface genio_fldlst_reset
+    module procedure genio_srclst_reset
+  end interface
+
+  interface genio_fldlst_diagnostics
+    module procedure genio_srclst_diagnostics
+  end interface
+
+  interface genio_fldlst_write
+    module procedure genio_srclst_write
+  end interface
 
   contains
 
@@ -34,417 +70,444 @@ module genio_mod_field
   ! Generic IO Field Subroutines
   !-----------------------------------------------------------------------------
 
-  subroutine io_comp_add_fields(state, geniostate, rc)
+  function genio_fldcfg_disabled(flstcfg, fldnm, rc)
+    ! return value
+    logical :: genio_fldcfg_disabled
     ! arguments
-    type(ESMF_State), intent(inout)           :: state
-    type(genio_state), pointer, intent(inout) :: geniostate
-    integer, intent(out)                      :: rc
+    type(ESMF_HConfig), intent(in) :: flstcfg
+    character(*), intent(in)       :: fldnm
+    integer, intent(out)           :: rc
     ! local variables
-    integer                                :: stat
-    integer                                :: n
-    integer                                :: itemCount
-    character(len=64),allocatable          :: itemNameList(:)
-    type(ESMF_StateItem_Flag), allocatable :: itemTypeList(:)
-    type(ESMF_Field)                       :: field
-    type(ESMF_StateItem_Flag)              :: itemType
-    logical                                :: fldOptsList
-    logical                                :: fldOpts
-    character(len=64)                      :: fldName
-    logical                                :: check
-    type(ESMF_HConfig)                     :: flistcfg
+    logical                        :: fldOpts
+    type(ESMF_HConfig)             :: fieldcfg
+    integer                        :: control
+    character(:), allocatable      :: badKey
+
+    rc = ESMF_SUCCESS
+    genio_fldcfg_disabled = .false.
+
+    ! access fieldcfg
+    fldOpts = ESMF_HConfigIsDefined(flstcfg, &
+      keyString=fldnm, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    if (fldOpts) then
+      fieldcfg = ESMF_HConfigCreateAt(flstcfg, &
+        keyString=fldnm, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      control = genio_hconfig2control(fieldcfg, key="control", &
+        defaultValue=GENIO_FCTRL_OPTIONAL, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (control .eq. GENIO_FCTRL_DISABLED) then
+        genio_fldcfg_disabled = .true.
+      else
+        genio_fldcfg_disabled = .false.
+      endif
+      call ESMF_HConfigDestroy(fieldcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      genio_fldcfg_disabled = .false.
+    endif
+  endfunction genio_fldcfg_disabled
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_state_check(state, flstcfg, rc)
+    ! arguments
+    type(ESMF_State), intent(in)   :: state
+    type(ESMF_HConfig), intent(in) :: flstcfg
+    integer, intent(out)           :: rc
+    ! local variables
     type(ESMF_HConfig)                     :: fieldcfg
     type(ESMF_HConfigIter)                 :: flistcur
     type(ESMF_HConfigIter)                 :: flistbeg
     type(ESMF_HConfigIter)                 :: flistend
     character(:), allocatable              :: fname
     integer                                :: control
-    type(genio_field), pointer             :: iofield
-    character(:), allocatable              :: badKey
+    type(ESMF_StateItem_Flag)              :: itemType
 
     rc = ESMF_SUCCESS
 
-    if (.not. associated(geniostate)) then
-      call ESMF_LogSetError(ESMF_RC_PTR_NOTALLOC, &
-        msg='GENIO: geniostate has not been associated', &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    endif
-
-    ! read field options
-    if (geniostate%cfgPresent) then
-      fldOptsList = ESMF_HConfigIsDefined(geniostate%cfg, &
-        keyString="fieldOptions", rc=rc)
+    flistbeg = ESMF_HConfigIterBegin(flstcfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    flistend = ESMF_HConfigIterEnd(flstcfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    flistcur = flistbeg
+    do while (ESMF_HConfigIterLoop(flistcur, flistbeg, flistend, rc=rc))
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-    else
-      fldOptsList = .false.
-    endif
-    if (fldOptsList) then
-      flistcfg = ESMF_HConfigCreateAt(geniostate%cfg, &
-        keyString="fieldOptions", rc=rc)
+      fname = ESMF_HConfigAsStringMapKey(flistcur, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      flistbeg = ESMF_HConfigIterBegin(flistcfg, rc=rc)
+      fieldcfg = ESMF_HConfigCreateAt(flstcfg, keyString=fname, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      flistend = ESMF_HConfigIterEnd(flistcfg, rc=rc)
+      control = genio_hconfig2control(fieldcfg, key="control", &
+        defaultValue=GENIO_FCTRL_OPTIONAL, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      flistcur = flistbeg
-      do while (ESMF_HConfigIterLoop(flistcur, flistbeg, flistend, rc=rc))
+      if (control .eq. GENIO_FCTRL_REQUIRED) then
+        call ESMF_StateGet(state, itemName=fname, itemType=itemType, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, file=__FILE__)) return
-        fname = ESMF_HConfigAsStringMapKey(flistcur, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        ! access fieldcfg
-        fieldcfg = ESMF_HConfigCreateAt(flistcfg, keyString=fname, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        check = ESMF_HConfigValidateMapKeys(fieldcfg, &
-          vocabulary=["control" &
-                     ], badKey=badKey, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        if (.not. check) then
+        if (itemType .ne. ESMF_STATEITEM_FIELD) then
           call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-            msg=trim(geniostate%cname)//": ("//fname//")"// &
-                " unknown fieldOption key - "//badKey, &
-            line=__LINE__,file=__FILE__, rcToReturn=rc)
+            msg="GENIO: required field is not available - "//trim(fname), &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
           return
         endif
-        control = genio_hconfig2control(fieldcfg, &
-          defaultValue=GENIO_FCTRL_OPTIONAL, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        if (control .eq. GENIO_FCTRL_REQUIRED) then
-          call ESMF_StateGet(state, itemName=fname, itemType=itemType, rc=rc)
-          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-            line=__LINE__, file=__FILE__)) return
-          if (itemType .ne. ESMF_STATEITEM_FIELD) then
-            call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-              msg=trim(geniostate%cname)//": ("//fname//")"// &
-                  " Required field is not connected", &
-              line=__LINE__,file=__FILE__, rcToReturn=rc)
-            return
-          endif
-        endif
-        call ESMF_HConfigDestroy(fieldcfg, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        deallocate(fname)
-      enddo ! fieldcfg
-    endif ! fldOptsList
+      endif
+      call ESMF_HConfigDestroy(fieldcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      deallocate(fname)
+    enddo
+  endsubroutine genio_state_check
 
+  !-----------------------------------------------------------------------------
+
+  function genio_srclst_create(state, flstcfg, rc)
+    ! return value
+    type(genio_srclst) :: genio_srclst_create
+    ! arguments
+    type(ESMF_State), intent(inout)          :: state
+    type(ESMF_HConfig), intent(in), optional :: flstcfg
+    integer, intent(out)                     :: rc
+    ! local variables
+    integer                                :: stat
+    integer                                :: itemCount
+    integer                                :: fieldCount
+    character(len=64),allocatable          :: itemNameList(:)
+    type(ESMF_StateItem_Flag), allocatable :: itemTypeList(:)
+    integer                                :: i
+    integer                                :: n
+    type(ESMF_Field)                       :: field
+    logical                                :: disabled
+
+    rc = ESMF_SUCCESS
+
+    ! get items in state
     call ESMF_StateGet(state, itemCount=itemCount, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-
     allocate(itemNameList(itemCount), stat=stat)
     if (ESMF_LogFoundAllocError(statusToCheck=stat, &
       msg='GENIO: Memory allocation failed.', &
-      line=__LINE__, &
-      file=__FILE__, &
-      rcToReturn=rc)) return
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
     allocate(itemTypeList(itemCount), stat=stat)
     if (ESMF_LogFoundAllocError(statusToCheck=stat, &
       msg='GENIO: Memory allocation failed.', &
-      line=__LINE__, &
-      file=__FILE__, &
-      rcToReturn=rc)) return
-
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
     call ESMF_StateGet(state, itemNameList=itemNameList, &
       itemTypeList=itemTypeList, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    do n=1, itemCount
-      if (itemTypeList(n) == ESMF_STATEITEM_FIELD) then
-        ! read field options
-        if (fldOptsList) then
-          ! access fieldcfg
-          fldOpts = ESMF_HConfigIsDefined(flistcfg, &
-            keyString=itemNameList(n), rc=rc)
+    ! count fields in state (if not disabled)
+    fieldCount = 0
+    if (present(flstcfg)) then
+      call genio_state_check(state, flstcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      do n=1, itemCount
+        if (itemTypeList(n) == ESMF_STATEITEM_FIELD) then
+          disabled = genio_fldcfg_disabled(flstcfg, itemNameList(n), rc=rc)
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, file=__FILE__)) return
-          if (fldOpts) then
-            fieldcfg = ESMF_HConfigCreateAt(flistcfg, &
-              keyString=itemNameList(n), rc=rc)
-            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, file=__FILE__)) return
-            control = genio_hconfig2control(fieldcfg, &
-              defaultValue=GENIO_FCTRL_OPTIONAL, rc=rc)
-            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, file=__FILE__)) return
-            if (control .eq. GENIO_FCTRL_DISABLED) then
-              call ESMF_StateRemove(state, itemNameList=(/itemNameList(n)/), &
-                rc=rc)
-              if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-                line=__LINE__, file=__FILE__)) return
-            else
-              call add_field()
-            endif
-            call ESMF_HConfigDestroy(fieldcfg, rc=rc)
-            if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, file=__FILE__)) return
-          else
-            call add_field()
-          endif ! fldOpts
-        else
-          call add_field()
-        endif ! fldOptsList
-      endif ! ESMF_STATEITEM_FIELD
-    enddo ! itemCount
-
-    if (fldOptsList) then  
-      call ESMF_HConfigDestroy(flistcfg, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    endif ! fldOptsList
-
-    contains
-
-    subroutine add_field()
-      nullify(iofield)
-      allocate(iofield, stat=stat)
-      if (ESMF_LogFoundAllocError(statusToCheck=stat, &
-        msg=trim(geniostate%cname)//': Memory allocation failed.', &
-        line=__LINE__, &
-        file=__FILE__, &
-        rcToReturn=rc)) return
-      ! field name
-      iofield%stdn = itemNameList(n)
-      ! basic initialization
-      iofield%fdim = 2
-      iofield%lsum = (/GENIO_FILV, 0.0_ESMF_KIND_R8/)
-      iofield%lmin = GENIO_FILV
-      iofield%lmax = GENIO_FILV
-      iofield%gsum = (/GENIO_FILV, 0.0_ESMF_KIND_R8/)
-      iofield%gmin = GENIO_FILV
-      iofield%gmax = GENIO_FILV
-      iofield%gavg = GENIO_FILV
-      iofield%dflt = GENIO_FILV
-      iofield%nfld => null()
-      if (.not. associated(geniostate%imp_flds_head)) then
-        geniostate%imp_flds_head => iofield
-        geniostate%imp_flds_tail => iofield
-      else
-        geniostate%imp_flds_tail%nfld => iofield
-        geniostate%imp_flds_tail => iofield
-      endif
-    endsubroutine add_field
-
-  endsubroutine io_comp_add_fields
-
-  !-----------------------------------------------------------------------------
-
-  subroutine io_comp_realize_field(geniostate, iofield, state, rc)
-    ! arguments
-    type(genio_state), pointer, intent(inout) :: geniostate
-    type(genio_field), pointer, intent(inout) :: iofield
-    type(ESMF_State), intent(inout)  :: state
-    integer, intent(out)             :: rc
-    ! local variables
-    integer :: stat
-
-    rc = ESMF_SUCCESS
-
-    if (.not. associated(geniostate)) then
-      call ESMF_LogSetError(ESMF_RC_PTR_NOTALLOC, &
-        msg='GENIO: geniostate has not been associated', &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    endif
-
-    if (.not. associated(iofield)) then
-      call ESMF_LogSetError(ESMF_RC_MEM_ALLOCATE, &
-        msg=trim(geniostate%cname)//": iofield error", &
-        line=__LINE__, &
-        file=__FILE__, &
-        rcToReturn=rc)
-      return
-    endif
-
-    call NUOPC_Realize(state, fieldName=iofield%stdn, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    if (associated(iofield%efld)) then
-      call ESMF_LogSetError(ESMF_RC_MEM_ALLOCATE, &
-        msg=trim(geniostate%cname)//": ESMF_Field error - "//trim(iofield%stdn), &
-        line=__LINE__, &
-        file=__FILE__, &
-        rcToReturn=rc)
-      return
-    endif
-    allocate(iofield%efld, stat=stat)
-    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
-      msg=trim(geniostate%cname)//': Memory allocation failed.', &
-      line=__LINE__, &
-      file=__FILE__, &
-      rcToReturn=rc)) return
-    call ESMF_StateGet(state, itemName=iofield%stdn, field=iofield%efld, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(iofield%efld, dimCount=iofield%fdim, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    if(iofield%fdim .eq. 3) then
-      call ESMF_FieldGet(iofield%efld, farrayPtr=iofield%ptr3, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    elseif(iofield%fdim .eq. 2) then
-      call ESMF_FieldGet(iofield%efld, farrayPtr=iofield%ptr2, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
+          if (.not. disabled) fieldCount = fieldCount + 1
+        endif
+      enddo
     else
-      call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-        msg=trim(geniostate%cname)//": field dimension - "//trim(iofield%stdn), &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    endif
-    call ESMF_FieldFill(iofield%efld, dataFillScheme="const", &
-      const1=0.0_ESMF_KIND_R8, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    iofield%rlze = .true.
-
-  endsubroutine io_comp_realize_field
-
-  !-----------------------------------------------------------------------------
-
-  subroutine io_comp_field_diagnostics(geniostate, label, timeString, rc)
-    ! arguments
-    type(genio_state), pointer, intent(in)    :: geniostate
-    character(*), intent(in)                  :: label
-    character(*), intent(in)                  :: timeString
-    integer, intent(out)                      :: rc
-    ! local variables
-    type(genio_field), pointer :: iofield
-    real(ESMF_KIND_R8) :: eval
-
-    rc = ESMF_SUCCESS
-
-    if (.not. associated(geniostate)) then
-      call ESMF_LogSetError(ESMF_RC_PTR_NOTALLOC, &
-        msg='GENIO: geniostate has not been associated', &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
+      do n=1, itemCount
+        if (itemTypeList(n) == ESMF_STATEITEM_FIELD) then
+          fieldCount = fieldCount + 1
+        endif
+      enddo
     endif
 
-    ! write to standard out
-    if (geniostate%myid .eq. geniostate%outid) then
-      write(*,'(A,X,A)') trim(geniostate%cname)//": "//trim(label), &
-        trim(timeString)
-    endif
-
-    iofield => geniostate%imp_flds_head
-    if (geniostate%myid .eq. geniostate%outid) then
-      write(*,'(A)') trim(geniostate%cname)//": Import Fields"
-      write(*,'(A,X,A25,X,A9,3(X,A9))') &
-        trim(geniostate%cname)//":", "FIELD", &
-        "COUNT", "MEAN", &
-        "MIN", "MAX"
-    endif
-    do while (associated(iofield))
-      call io_comp_field_stat()
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      if (geniostate%myid .eq. geniostate%outid) then
-        write(*,'(A,X,A25,X,I9,3(X,E9.2))') &
-          trim(geniostate%cname)//":", trim(iofield%stdn), &
-          int(iofield%gsum(2)), iofield%gavg, &
-          iofield%gmin(1), iofield%gmax(1)
+    ! create srclst from enabled fields
+    allocate(genio_srclst_create%fld(fieldCount), stat=stat)
+    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+      msg='GENIO: Memory allocation failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+    i = 0
+    do n=1, itemCount
+      if (itemTypeList(n) == ESMF_STATEITEM_FIELD) then
+        if (present(flstcfg)) then
+          disabled = genio_fldcfg_disabled(flstcfg, itemNameList(n), rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        else
+          disabled = .false.
+        endif
+        if (.not. disabled) then
+          i = i + 1
+          genio_srclst_create%fld(i)%name = itemNameList(n)
+          genio_srclst_create%fld(i)%fdim = 2
+          call ESMF_StateGet(state, itemName=itemNameList(n), &
+            field=genio_srclst_create%fld(i)%efld, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        else
+          call ESMF_StateRemove(state, itemNameList=(/itemNameList(n)/), &
+            rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        endif
       endif
-      iofield => iofield%nfld
     enddo
 
-    contains
-
-    subroutine io_comp_field_stat()
-      ! local variables
-      real(ESMF_KIND_R8) :: eval
-
-      if (iofield%rlze) then
-        if(iofield%fdim .eq. 3) then
-          eval = epsilon(iofield%ptr3)
-          iofield%lsum(1)=sum(iofield%ptr3,abs(iofield%ptr3-GENIO_FILV)>eval)
-          iofield%lsum(2)=count(abs(iofield%ptr3-GENIO_FILV)>eval)
-          iofield%lmin(1)=minval(iofield%ptr3,abs(iofield%ptr3-GENIO_FILV)>eval)
-          iofield%lmax(1)=maxval(iofield%ptr3,abs(iofield%ptr3-GENIO_FILV)>eval)
-        elseif(iofield%fdim .eq. 2) then
-          eval = epsilon(iofield%ptr2)
-          iofield%lsum(1)=sum(iofield%ptr2,abs(iofield%ptr2-GENIO_FILV)>eval)
-          iofield%lsum(2)=count(abs(iofield%ptr2-GENIO_FILV)>eval)
-          iofield%lmin(1)=minval(iofield%ptr2,abs(iofield%ptr2-GENIO_FILV)>eval)
-          iofield%lmax(1)=maxval(iofield%ptr2,abs(iofield%ptr2-GENIO_FILV)>eval)
-        else
-          call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
-            msg=trim(geniostate%cname)//": field dimension - "// &
-                trim(iofield%stdn), &
-            line=__LINE__, file=__FILE__, rcToReturn=rc)
-          return
-        endif
-        call ESMF_VMReduce(vm=geniostate%vm, sendData=iofield%lsum, &
-          recvData=iofield%gsum, count=2, &
-          reduceflag=ESMF_REDUCE_SUM, rootPet=geniostate%outid, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        call ESMF_VMReduce(vm=geniostate%vm, sendData=iofield%lmin, &
-          recvData=iofield%gmin, count=1, &
-          reduceflag=ESMF_REDUCE_MIN, rootPet=geniostate%outid, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        call ESMF_VMReduce(vm=geniostate%vm, sendData=iofield%lmax, &
-          recvData=iofield%gmax, count=1, &
-          reduceflag=ESMF_REDUCE_MAX, rootPet=geniostate%outid, rc=rc)
-        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-          line=__LINE__, file=__FILE__)) return
-        if (geniostate%myid .eq. geniostate%outid) then
-          ! calculate average
-          if(iofield%gsum(2) .lt. 1) then
-            iofield%gavg = 0.0_ESMF_KIND_R8
-          else
-            iofield%gavg = iofield%gsum(1) / iofield%gsum(2)
-          endif
-        endif
-      else
-        iofield%gsum = (/GENIO_FILV, 0.0_ESMF_KIND_R8/)
-        iofield%gmin = GENIO_FILV
-        iofield%gmax = GENIO_FILV
-        iofield%gavg = 0.0_ESMF_KIND_R8
-      endif
-
-    endsubroutine io_comp_field_stat
-
-  endsubroutine io_comp_field_diagnostics
+  endfunction genio_srclst_create
 
   !-----------------------------------------------------------------------------
 
-  subroutine io_comp_field_write(geniostate, fileName, rc)
+  subroutine genio_srclst_destroy(srclst, rc)
     ! arguments
-    type(genio_state), pointer, intent(in) :: geniostate
-    character(*), intent(in)               :: fileName
-    integer, intent(out)                   :: rc
+    type(genio_srclst), intent(inout) :: srclst
+    integer, intent(out)              :: rc
     ! local variables
-    type(ESMF_FieldBundle)     :: fb
-    type(genio_field), pointer :: iofield
+    integer :: stat
+    integer :: i
 
     rc = ESMF_SUCCESS
 
-    if (.not. associated(geniostate)) then
-      call ESMF_LogSetError(ESMF_RC_PTR_NOTALLOC, &
-        msg='GENIO: geniostate has not been associated', &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
+    do i=1, size(srclst%fld)
+      call ESMF_FieldDestroy(srclst%fld(i)%efld, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    enddo
+
+    deallocate(srclst%fld, stat=stat)
+    if (ESMF_LogFoundDeallocError(statusToCheck=stat, &
+      msg='GENIO: Memory deallocation failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+
+  endsubroutine genio_srclst_destroy
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_srclst_realize(state, srclst, rc)
+    ! arguments
+    type(ESMF_State), intent(inout)   :: state
+    type(genio_srclst), intent(inout) :: srclst
+    integer, intent(out)              :: rc
+    ! local variables
+    integer :: stat
+    integer :: i
+
+    rc = ESMF_SUCCESS
+
+    do i=1, size(srclst%fld)
+      call NUOPC_Realize(state, fieldName=srclst%fld(i)%name, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_FieldGet(srclst%fld(i)%efld, &
+        dimCount=srclst%fld(i)%fdim, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if(srclst%fld(i)%fdim .eq. 3) then
+        call ESMF_FieldGet(srclst%fld(i)%efld, &
+          farrayPtr=srclst%fld(i)%ptrR82D, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      elseif(srclst%fld(i)%fdim .eq. 2) then
+        call ESMF_FieldGet(srclst%fld(i)%efld, &
+          farrayPtr=srclst%fld(i)%ptrR82D, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      else
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg="GENIO: field dimension - "//trim(srclst%fld(i)%name), &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      call ESMF_FieldFill(srclst%fld(i)%efld, dataFillScheme="const", &
+        const1=0.0_ESMF_KIND_R8, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    enddo ! srclst
+
+  endsubroutine genio_srclst_realize
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_srclst_remove(state, srclst, rc)
+    ! arguments
+    type(ESMF_State), intent(inout)   :: state
+    type(genio_srclst), intent(inout) :: srclst
+    integer, intent(out)              :: rc
+    ! local variables
+    integer :: stat
+    integer :: i
+
+    rc = ESMF_SUCCESS
+
+    do i=1, size(srclst%fld)
+      call ESMF_StateRemove(state, (/srclst%fld(i)%name/), rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    enddo ! srclst
+
+  endsubroutine genio_srclst_remove
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_srclst_zero(srclst, rc)
+    ! arguments
+    type(genio_srclst), intent(inout) :: srclst
+    integer, intent(out)              :: rc
+    ! local variables
+    integer :: i
+
+    rc = ESMF_SUCCESS
+
+    do i=1, size(srclst%fld)
+      call ESMF_FieldFill(srclst%fld(i)%efld, dataFillScheme="const", &
+        const1=0.0_ESMF_KIND_R8, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    enddo ! srclst
+
+  endsubroutine genio_srclst_zero
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_srclst_reset(srclst, rc)
+    ! arguments
+    type(genio_srclst), intent(inout) :: srclst
+    integer, intent(out)              :: rc
+    ! local variables
+    integer :: i
+
+    rc = ESMF_SUCCESS
+
+    do i=1, size(srclst%fld)
+      call ESMF_FieldFill(srclst%fld(i)%efld, dataFillScheme="const", &
+        const1=srclst%fld(i)%dflt, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    enddo ! srclst
+
+  endsubroutine genio_srclst_reset
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_srclst_diagnostics(srclst, myid, outid, vm, cname, label, &
+  timeString, rc)
+    ! arguments
+    type(genio_srclst), intent(inout) :: srclst
+    integer, intent(in)               :: myid
+    integer, intent(in)               :: outid
+    type(ESMF_VM), intent(in)         :: vm
+    character(*), intent(in)          :: cname
+    character(*), intent(in)          :: label
+    character(*), intent(in)          :: timeString
+    integer, intent(out)              :: rc
+    ! local variables
+    real(ESMF_KIND_R8) :: eval
+    integer            :: i
+
+    rc = ESMF_SUCCESS
+    do i = 1, size(srclst%fld)
+      call genio_field_stats(srclst%fld(i))
+    enddo
+
+    if (myid .eq. outid) then
+      write(*,'(A,X,A)') trim(cname)//": "//trim(label), &
+        trim(timeString)
+      write(*,'(A)') trim(cname)//": "//trim(srclst%name)
+      write(*,'(A,X,A25,X,A9,3(X,A9))') &
+        trim(cname)//":", "FIELD", "COUNT", "MEAN", "MIN", "MAX"
+      do i = 1, size(srclst%fld)
+        write(*,'(A,X,A25,X,I9,3(X,E9.2))') &
+          trim(cname)//":", trim(srclst%fld(i)%name), &
+          int(srclst%fld(i)%gsum(2)), srclst%fld(i)%gavg, &
+          srclst%fld(i)%gmin(1), srclst%fld(i)%gmax(1)
+      enddo
     endif
+
+    contains
+
+    subroutine genio_field_stats(fld)
+      ! arguments
+      type(genio_fld), intent(inout) :: fld
+
+      if(fld%fdim .eq. 3) then
+        eval = epsilon(fld%ptrR83D)
+        fld%lsum(1)=sum(fld%ptrR83D,abs(fld%ptrR83D-GENIO_FILV)>eval)
+        fld%lsum(2)=count(abs(fld%ptrR83D-GENIO_FILV)>eval)
+        fld%lmin(1)=minval(fld%ptrR83D,abs(fld%ptrR83D-GENIO_FILV)>eval)
+        fld%lmax(1)=maxval(fld%ptrR83D,abs(fld%ptrR83D-GENIO_FILV)>eval)
+      elseif(fld%fdim .eq. 2) then
+        eval = epsilon(fld%ptrR82D)
+        fld%lsum(1)=sum(fld%ptrR82D,abs(fld%ptrR82D-GENIO_FILV)>eval)
+        fld%lsum(2)=count(abs(fld%ptrR82D-GENIO_FILV)>eval)
+        fld%lmin(1)=minval(fld%ptrR82D,abs(fld%ptrR82D-GENIO_FILV)>eval)
+        fld%lmax(1)=maxval(fld%ptrR82D,abs(fld%ptrR82D-GENIO_FILV)>eval)
+      else
+        call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+          msg=trim(cname)//": field dimension - "// &
+              trim(fld%name), &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      call ESMF_VMReduce(vm, sendData=fld%lsum, &
+        recvData=fld%gsum, count=2, &
+        reduceflag=ESMF_REDUCE_SUM, rootPet=outid, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_VMReduce(vm=vm, sendData=fld%lmin, &
+        recvData=fld%gmin, count=1, &
+        reduceflag=ESMF_REDUCE_MIN, rootPet=outid, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      call ESMF_VMReduce(vm=vm, sendData=fld%lmax, &
+        recvData=fld%gmax, count=1, &
+        reduceflag=ESMF_REDUCE_MAX, rootPet=outid, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (myid .eq. outid) then
+        ! calculate average
+        if(fld%gsum(2) .lt. 1) then
+          fld%gavg = 0.0_ESMF_KIND_R8
+        else
+          fld%gavg = fld%gsum(1) / fld%gsum(2)
+        endif
+      else
+        fld%gsum = (/GENIO_FILV, 0.0_ESMF_KIND_R8/)
+        fld%gmin = GENIO_FILV
+        fld%gmax = GENIO_FILV
+        fld%gavg = 0.0_ESMF_KIND_R8
+      endif
+
+    endsubroutine genio_field_stats
+
+  endsubroutine genio_srclst_diagnostics
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_outlst_write(outlst, fileName, rc)
+    ! arguments
+    type(genio_outlst), intent(in) :: outlst
+    character(*), intent(in)       :: fileName
+    integer, intent(out)           :: rc
+    ! local variables
+    type(ESMF_FieldBundle) :: fb
+    integer                :: i
+
+    rc = ESMF_SUCCESS
 
     fb = ESMF_FieldBundleCreate(rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    iofield => geniostate%imp_flds_head
-    do while (associated(iofield))
-      call ESMF_FieldBundleAdd(fb, fieldList=(/iofield%efld/), rc=rc)
-      iofield => iofield%nfld
+
+    do i = 1, size(outlst%fld)
+      call ESMF_FieldBundleAdd(fb, fieldList=(/outlst%fld(i)%efld/), rc=rc)
     enddo
     call ESMF_FieldBundleWrite(fb, &
       fileName=filename, &
@@ -455,6 +518,37 @@ module genio_mod_field
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-  endsubroutine io_comp_field_write
+  endsubroutine genio_outlst_write
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_srclst_write(srclst, fileName, rc)
+    ! arguments
+    type(genio_srclst), intent(in) :: srclst
+    character(*), intent(in)       :: fileName
+    integer, intent(out)           :: rc
+    ! local variables
+    type(ESMF_FieldBundle) :: fb
+    integer                :: i
+
+    rc = ESMF_SUCCESS
+
+    fb = ESMF_FieldBundleCreate(rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    do i = 1, size(srclst%fld)
+      call ESMF_FieldBundleAdd(fb, fieldList=(/srclst%fld(i)%efld/), rc=rc)
+    enddo
+    call ESMF_FieldBundleWrite(fb, &
+      fileName=filename, &
+      overwrite=.true., rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldBundleDestroy(fb, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+  endsubroutine genio_srclst_write
 
 endmodule genio_mod_field

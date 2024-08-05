@@ -77,10 +77,6 @@ module genio_mod_config
         return
       endif
       ! options
-      geniostate%write_final = genio_hconfig2logical(outcfg, "write_final", &
-        defaultValue=.true., rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
       call ESMF_HConfigDestroy(outcfg, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return

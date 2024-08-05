@@ -26,6 +26,7 @@ module genio_mod_util
   public genio_hconfig2str
   public genio_hconfig2logical
   public genio_hconfig2control
+  public genio_hconfig2csys
 
   contains
 
@@ -201,11 +202,12 @@ module genio_mod_util
 
   !-----------------------------------------------------------------------------
 
-  function genio_hconfig2control(hconfig, defaultValue, rc)
+  function genio_hconfig2control(hconfig, key, defaultValue, rc)
     ! return value
     integer :: genio_hconfig2control
     ! arguments
     type(ESMF_HConfig), intent(in) :: hconfig
+    character(*), intent(in)       :: key
     integer, intent(in), optional  :: defaultValue
     integer, intent(out)           :: rc
     ! local variables
@@ -217,12 +219,12 @@ module genio_mod_util
 
     genio_hconfig2control = GENIO_FCTRL_OPTIONAL
 
-    isPresent = ESMF_HConfigIsDefined(hconfig, keyString="control", rc=rc)
+    isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
     if (isPresent) then
-      strValue = ESMF_HConfigAsString(hconfig, keyString="control", asOkay=check, rc=rc)
+      strValue = ESMF_HConfigAsString(hconfig, keyString=key, asOkay=check, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       if (.not.check) then
@@ -241,7 +243,7 @@ module genio_mod_util
           genio_hconfig2control = GENIO_FCTRL_OPTIONAL
         case ("required","on")
           genio_hconfig2control = GENIO_FCTRL_REQUIRED
-        case default 
+        case default
           call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
             msg="GENIO: Field control is invalid - "//trim(strValue), &
             line=__LINE__, file=__FILE__, rcToReturn=rc)
@@ -252,12 +254,73 @@ module genio_mod_util
       genio_hconfig2control = defaultValue
     else
       call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
-        msg="GENIO: Field priroty not found", &
+        msg="GENIO: Field control not found", &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif
 
   endfunction genio_hconfig2control
+
+  !-----------------------------------------------------------------------------
+
+  function genio_hconfig2csys(hconfig, key, defaultValue, rc)
+    ! return value
+    type(ESMF_CoordSys_Flag) :: genio_hconfig2csys
+    ! arguments
+    type(ESMF_HConfig), intent(in)                 :: hconfig
+    character(*), intent(in)                       :: key
+    type(ESMF_CoordSys_Flag), intent(in), optional :: defaultValue
+    integer, intent(out)                           :: rc
+    ! local variables
+    character(len=:), allocatable :: strValue
+    logical :: isPresent
+    logical :: check
+
+    rc = ESMF_SUCCESS
+
+    genio_hconfig2csys = ESMF_COORDSYS_SPH_DEG
+
+    isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    if (isPresent) then
+      strValue = ESMF_HConfigAsString(hconfig, keyString=key, asOkay=check, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (.not.check) then
+        call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+          msg="GENIO: Field coordSys cannot be converted to String", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      strValue = ESMF_UtilStringUpperCase(strValue, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      select case (strValue)
+        case ("ESMF_COORDSYS_CART")
+          genio_hconfig2csys = ESMF_COORDSYS_CART
+        case ("ESMF_COORDSYS_SPH_DEG")
+          genio_hconfig2csys = ESMF_COORDSYS_SPH_DEG
+        case ("ESMF_COORDSYS_SPH_RAD")
+          genio_hconfig2csys = ESMF_COORDSYS_SPH_RAD
+        case default
+          call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+            msg="GENIO: Field coordSys is invalid - "//trim(strValue), &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endselect
+      deallocate(strValue)
+    elseif (present(defaultValue)) then
+      genio_hconfig2csys = defaultValue
+    else
+      call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
+        msg="GENIO: Field coordSys not found", &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+
+  endfunction genio_hconfig2csys
 
   !-----------------------------------------------------------------------------
 
