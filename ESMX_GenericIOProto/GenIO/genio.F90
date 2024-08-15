@@ -21,6 +21,7 @@ module genio
   use genio_mod_struct
   use genio_mod_params
   use genio_mod_util
+  use genio_mod_defaults
   use genio_mod_geom
   use genio_mod_field
 
@@ -46,10 +47,17 @@ module genio
     type(genio_state), pointer :: geniostate
     character(len=64)          :: value
     type(ESMF_Config)          :: config
-    type(ESMF_HConfig)         :: hconfig, hconfigNode
+    type(ESMF_HConfig)         :: hconfig
     character(80)              :: compLabel
     character(:), allocatable  :: badKey
     logical                    :: isFlag
+    logical                    :: check
+    logical                    :: compcfg_p
+    logical                    :: dfltcfg_p
+    logical                    :: outpcfg_p
+    logical                    :: geomcfg_p
+    logical                    :: flstcfg_p
+    type(ESMF_HConfig)         :: compcfg
 
     rc = ESMF_SUCCESS
 
@@ -126,12 +134,10 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! validate config
     call ESMF_GridCompGet(genio, name=compLabel, configIsPresent=isFlag, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return  ! bail out
     if (isFlag) then
-      geniostate%cfgPresent = .true.
       ! Config present, assert it is in the ESMX YAML format
       call ESMF_GridCompGet(genio, config=config, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -139,31 +145,106 @@ module genio
       call ESMF_ConfigGet(config, hconfig=hconfig, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return  ! bail out
-      geniostate%cfg = ESMF_HConfigCreateAt(hconfig, keyString=compLabel, rc=rc)
+      compcfg_p = ESMF_HConfigIsDefined(hconfig, keyString=compLabel, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      compcfg_p = .false.
+    endif
+
+    ! create component configuration
+    if (compcfg_p) then
+      compcfg = ESMF_HConfigCreateAt(hconfig, keyString=compLabel, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return  ! bail out
-      ! component responsibility to validate ESMX handled options here, and
-      ! potentially locally handled options
-      isFlag = ESMF_HConfigValidateMapKeys(geniostate%cfg, &
-        vocabulary=["model        ", &  ! ESMX_Driver handled option
-                    "petList      ", &  ! ESMX_Driver handled option
-                    "ompNumThreads", &  ! ESMX_Driver handled option
-                    "attributes   ", &  ! ESMX_Driver handled option
-                    "outputOptions", &  ! GenIO handled option
-                    "geom         ", &  ! GenIO handled option
-                    "fieldOptions "  &  ! GenIO handled option
+      check = ESMF_HConfigValidateMapKeys(compcfg, &
+        vocabulary=["model         ", &  ! ESMX_Driver handled option
+                    "petList       ", &  ! ESMX_Driver handled option
+                    "ompNumThreads ", &  ! ESMX_Driver handled option
+                    "attributes    ", &  ! ESMX_Driver handled option
+                    "defaultOptions", &  ! GenIO handled option
+                    "outputOptions ", &  ! GenIO handled option
+                    "fieldOptions  ", &  ! GenIO handled option
+                    "geomOptions   "  &  ! GenIO handled option
                    ], badKey=badKey, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return  ! bail out
-      if (.not.isFlag) then
+      if (.not.check) then
         call ESMF_LogSetError(ESMF_RC_ARG_WRONG, &
           msg="An invalid key was found in config under "//trim(compLabel)// &
             " (maybe a typo?): "//badKey, &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
+      dfltcfg_p = ESMF_HConfigIsDefined(compcfg, &
+        keyString="defaultOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      outpcfg_p = ESMF_HConfigIsDefined(compcfg, &
+        keyString="outputOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      geomcfg_p = ESMF_HConfigIsDefined(compcfg, &
+        keyString="geom", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      flstcfg_p = ESMF_HConfigIsDefined(compcfg, &
+        keyString="fieldOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
     else
-      geniostate%cfgPresent = .false.
+      dfltcfg_p = .false.
+      outpcfg_p = .false.
+      geomcfg_p = .false.
+      flstcfg_p = .false.
+    endif
+
+    if (dfltcfg_p) then
+      geniostate%dfltcfg = ESMF_HConfigCreateAt(compcfg, &
+        keyString="defaultOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      geniostate%dfltcfg = ESMF_HConfigCreate(content="{}", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    if (outpcfg_p) then
+      geniostate%outpcfg = ESMF_HConfigCreateAt(compcfg, &
+        keyString="outputOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      geniostate%outpcfg = ESMF_HConfigCreate(content="{}", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    if (geomcfg_p) then
+      geniostate%geomcfg = ESMF_HConfigCreateAt(compcfg, &
+        keyString="geom", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      geniostate%geomcfg = ESMF_HConfigCreate(content="{}", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+    if (flstcfg_p) then
+      geniostate%flstcfg = ESMF_HConfigCreateAt(compcfg, &
+        keyString="fieldOptions", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    else
+      geniostate%flstcfg = ESMF_HConfigCreate(content="{}", rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
+
+    ! destory component configuration
+    if (compcfg_p) then
+      call ESMF_HConfigDestroy(compcfg, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
     endif
 
   endsubroutine SetServices
@@ -225,13 +306,10 @@ module genio
     type(geniostate_wrap)      :: is
     type(genio_state), pointer :: geniostate
     type(ESMF_State)           :: importState
+    logical                    :: dfltcfg_p
     logical                    :: outpcfg_p
     logical                    :: geomcfg_p
     logical                    :: flstcfg_p
-    type(ESMF_HConfig)         :: outpcfg
-    type(ESMF_HConfig)         :: geomcfg
-    type(ESMF_HConfig)         :: flstcfg
-    character(256)             :: errmsg
 
     rc = ESMF_SUCCESS
 
@@ -259,60 +337,21 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! check configuration information
-    if (geniostate%cfgPresent) then
-      outpcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
-        keyString="outputOptions", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      geomcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
-        keyString="geom", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      flstcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
-        keyString="fieldOptions", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    else
-      outpcfg_p = .false.
-      geomcfg_p = .false.
-      flstcfg_p = .false.
-    endif
-
-    ! output configuration
-    if (outpcfg_p) then
-      outpcfg = ESMF_HConfigCreateAt(geniostate%cfg, &
-        keyString="outputOptions", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      geniostate%srclst = genio_fldlst_create(importstate, outpcfg, &
-        name=trim(geniostate%cname)//"SrcList", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_HConfigDestroy(outpcfg, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    else
-      call ESMF_LogSetError(ESMF_RC_PTR_NOTALLOC, &
-        msg='GENIO: outputOptions are missing', &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    endif
-
-    ! geometry configuration
-    if (geomcfg_p) then
-      geomcfg = ESMF_HConfigCreateAt(geniostate%cfg, &
-        keyString="geom", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      geniostate%geom = genio_geom_create(geomcfg, errmsg, rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_HConfigDestroy(geomcfg, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    endif
-
+    ! create defaults
+    geniostate%dflts = genio_dflts_create(geniostate%dfltcfg, &
+      rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    ! create source data state
+    geniostate%srclst = genio_fldlst_create(importstate, geniostate%outpcfg, &
+      geniostate%dflts, name=trim(geniostate%cname)//"SrcList", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    ! create geom object
+    geniostate%geom = genio_geom_create(geniostate%geomcfg, &
+      geniostate%dflts, rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
   end subroutine ModifyAdvertised
 
@@ -376,8 +415,6 @@ module genio
     type(genio_state), pointer :: geniostate
     type(ESMF_State)           :: importState
     type(ESMF_TimeInterval)    :: dfltTimeInt
-    logical                    :: outpcfg_p
-    type(ESMF_HConfig)         :: outpcfg
 
     rc = ESMF_SUCCESS
 
@@ -415,35 +452,12 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! check configuration information
-    if (geniostate%cfgPresent) then
-      outpcfg_p = ESMF_HConfigIsDefined(geniostate%cfg, &
-        keyString="outputOptions", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    else
-      outpcfg_p = .false.
-    endif
-
-    ! output configuration
-    if (outpcfg_p) then
-      outpcfg = ESMF_HConfigCreateAt(geniostate%cfg, &
-        keyString="outputOptions", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      geniostate%outlst = genio_fldlst_create(geniostate%srclst, outpcfg, &
-        name=trim(geniostate%cname)//"OutLst", rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-      call ESMF_HConfigDestroy(outpcfg, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, file=__FILE__)) return
-    else
-      call ESMF_LogSetError(ESMF_RC_PTR_NOTALLOC, &
-        msg='GENIO: outputOptions are missing', &
-        line=__LINE__, file=__FILE__, rcToReturn=rc)
-      return
-    endif
+    ! create output state
+    geniostate%outlst = genio_fldlst_create(geniostate%srclst, &
+      geniostate%outpcfg, geniostate%flstcfg, geniostate%dflts, &
+      name=trim(geniostate%cname)//"OutLst", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     ! reset source data
     call genio_fldlst_reset(geniostate%srclst, rc=rc)
@@ -740,10 +754,18 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    call ESMF_HConfigDestroy(geniostate%cfg, rc=rc)
+    call ESMF_HConfigDestroy(geniostate%geomcfg, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    geniostate%cfgPresent = .false.
+    call ESMF_HConfigDestroy(geniostate%outpcfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_HConfigDestroy(geniostate%dfltcfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_HConfigDestroy(geniostate%flstcfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     deallocate(is%ptr, stat=stat)
     if (ESMF_LogFoundDeallocError(statusToCheck=stat, &

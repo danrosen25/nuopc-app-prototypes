@@ -33,17 +33,15 @@ module genio_mod_geom
   ! Generic IO Geom Subroutines
   !-----------------------------------------------------------------------------
 
-  function genio_geom_create(geomcfg, errmsg, rc)
+  function genio_geom_create(geomcfg, dflts, rc)
     ! return value
     type(genio_geom) :: genio_geom_create
     ! arguments
     type(ESMF_HConfig), intent(in) :: geomcfg
-    character(*), intent(out)      :: errmsg
+    type(genio_dflts), intent(in)  :: dflts
     integer, intent(out)           :: rc
     ! local variables
-    integer            :: stat
-    logical            :: check
-    character(len=64)  :: cfgval
+    logical                   :: check
     character(:), allocatable :: badKey
 
     rc = ESMF_SUCCESS
@@ -62,43 +60,45 @@ module genio_mod_geom
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     if (.not. check) then
-      rc = ESMF_RC_NOT_VALID
-      errmsg = "unknown geom option key - "//badKey
+      call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+        msg="GENIO: unknown option in defaults "//badKey, &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
     endif
 
     ! dimensions
     genio_geom_create%nx = genio_hconfig2i4(geomcfg, "nx", &
-      defaultValue=GENIO_DFLT_NX, rc=rc)
+      defaultValue=dflts%nx, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     genio_geom_create%ny = genio_hconfig2i4(geomcfg, "ny", &
-      defaultValue=GENIO_DFLT_NY, rc=rc)
+      defaultValue=dflts%ny, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     genio_geom_create%nz = genio_hconfig2i4(geomcfg, "nz", &
-      defaultValue=GENIO_DFLT_NZ, rc=rc)
+      defaultValue=dflts%nz, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     ! coordinate system
     genio_geom_create%csys = genio_hconfig2csys(geomcfg, "coordSys", &
-      defaultValue=GENIO_DFLT_CSYS, rc=rc)
+      defaultValue=dflts%csys, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     ! coordinates
     genio_geom_create%minx = genio_hconfig2r8(geomcfg, "minx", &
-      defaultValue=GENIO_DFLT_MINX, rc=rc)
+      defaultValue=dflts%minx, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     genio_geom_create%maxx = genio_hconfig2r8(geomcfg, "maxx", &
-      defaultValue=GENIO_DFLT_MAXX, rc=rc)
+      defaultValue=dflts%maxx, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     genio_geom_create%miny = genio_hconfig2r8(geomcfg, "miny", &
-      defaultValue=GENIO_DFLT_MINY, rc=rc)
+      defaultValue=dflts%miny, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     genio_geom_create%maxy = genio_hconfig2r8(geomcfg, "maxy", &
-      defaultValue=GENIO_DFLT_MAXY, rc=rc)
+      defaultValue=dflts%maxy, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
   endfunction genio_geom_create

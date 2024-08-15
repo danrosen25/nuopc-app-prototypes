@@ -22,12 +22,26 @@ module genio_mod_struct
   private
 
   ! data structures
+  public genio_dflts
   public genio_fld
   public genio_srclst
   public genio_outlst
   public genio_geom
   public genio_state
   public geniostate_wrap
+
+  type genio_dflts
+    real(ESMF_KIND_R8)       :: filv = GENIO_FILV
+    integer                  :: nx   = GENIO_DFLT_NX
+    integer                  :: ny   = GENIO_DFLT_NY
+    integer                  :: nz   = GENIO_DFLT_NZ
+    real(ESMF_KIND_R8)       :: minx = GENIO_DFLT_MINX
+    real(ESMF_KIND_R8)       :: maxx = GENIO_DFLT_MAXX
+    real(ESMF_KIND_R8)       :: miny = GENIO_DFLT_MINY
+    real(ESMF_KIND_R8)       :: maxy = GENIO_DFLT_MAXY
+    type(ESMF_CoordSys_Flag) :: csys = GENIO_DFLT_CSYS
+    integer                  :: otyp = GENIO_DFLT_OTYP
+  endtype genio_dflts
 
   type genio_fld
     character(len=64)           :: name        = "uninitialized"
@@ -94,8 +108,10 @@ module genio_mod_struct
   type genio_state
     ! component information
     character(32)           :: cname      = "GENIO"
-    logical                 :: cfgPresent = .false.
-    type(ESMF_HConfig)      :: cfg
+    type(ESMF_HConfig)      :: dfltcfg
+    type(ESMF_HConfig)      :: outpcfg
+    type(ESMF_HConfig)      :: geomcfg
+    type(ESMF_HConfig)      :: flstcfg
     integer                 :: verbosity  =  0
     integer                 :: diagnostic =  0
     integer                 :: myid       = -1
@@ -105,6 +121,7 @@ module genio_mod_struct
     type(genio_geom)        :: geom
     type(genio_srclst)      :: srclst
     type(genio_outlst)      :: outlst
+    type(genio_dflts)       :: dflts
   endtype genio_state
 
   type geniostate_wrap

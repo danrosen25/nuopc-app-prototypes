@@ -28,7 +28,7 @@ module genio_mod_util
   public genio_hconfig2logical
   public genio_hconfig2timeint
   public genio_hconfig2csys
-  public genio_hconfig2ftyp
+  public genio_hconfig2otyp
 
   contains
 
@@ -333,9 +333,9 @@ module genio_mod_util
 
   !-----------------------------------------------------------------------------
 
-  function genio_hconfig2ftyp(hconfig, key, defaultValue, rc)
+  function genio_hconfig2otyp(hconfig, key, defaultValue, rc)
     ! return value
-    integer :: genio_hconfig2ftyp
+    integer :: genio_hconfig2otyp
     ! arguments
     type(ESMF_HConfig), intent(in) :: hconfig
     character(*), intent(in)       :: key
@@ -348,7 +348,7 @@ module genio_mod_util
 
     rc = ESMF_SUCCESS
 
-    genio_hconfig2ftyp = GENIO_ERROR
+    genio_hconfig2otyp = GENIO_ERROR
 
     isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -360,7 +360,7 @@ module genio_mod_util
         line=__LINE__, file=__FILE__)) return
       if (.not.check) then
         call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-          msg="GENIO: Field ftyp cannot be converted to String", &
+          msg="GENIO: Field otyp cannot be converted to String", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
@@ -369,11 +369,11 @@ module genio_mod_util
         line=__LINE__, file=__FILE__)) return
       select case (strValue)
         case ("MEAN","GENIO_MEAN")
-          genio_hconfig2ftyp = GENIO_MEAN
+          genio_hconfig2otyp = GENIO_MEAN
         case ("INST","GENIO_INST","INSTANTANEOUS")
-          genio_hconfig2ftyp = GENIO_INST
+          genio_hconfig2otyp = GENIO_INST
         case ("ACCM","GENIO_ACCM","ACCUMULATE")
-          genio_hconfig2ftyp = GENIO_ACCM
+          genio_hconfig2otyp = GENIO_ACCM
         case default
           call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
             msg="GENIO: Field output type is invalid - "//trim(strValue), &
@@ -382,16 +382,17 @@ module genio_mod_util
       endselect
       deallocate(strValue)
     elseif (present(defaultValue)) then
-      genio_hconfig2ftyp = defaultValue
+      genio_hconfig2otyp = defaultValue
     else
       call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
-        msg="GENIO: ftyp key not found - "//trim(key), &
+        msg="GENIO: otyp key not found - "//trim(key), &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif
 
-  endfunction genio_hconfig2ftyp
+  endfunction genio_hconfig2otyp
 
   !-----------------------------------------------------------------------------
+
 
 endmodule genio_mod_util

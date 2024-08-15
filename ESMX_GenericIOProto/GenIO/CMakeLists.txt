@@ -25,6 +25,7 @@ else()
 endif()
 
 add_library(GenIO genio.F90
+                  genio_defaults.F90
                   genio_field.F90
                   genio_geom.F90
                   genio_util.F90

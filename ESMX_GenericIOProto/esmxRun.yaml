@@ -33,13 +33,17 @@ IO:
   attributes:
     Verbosity:  low
     Diagnostic: 0
+  defaultOptions:
+    outputType: inst
   outputOptions:
-    print_src: false
-    write_src: false
-    print_out: true
-    final_out: false
+    diagnosticSrc: false
+    diagnosticOut: true
+    writeSrc: false
+    writeFinal: false
     frequency: 0000-00-00T00:30:00
     fieldset: [surface_downward_water_flux,
                precipitation_flux,
 #               surface_net_downward_shortwave_flux
               ]
+  fieldOptions:
+    precipitation_flux: {outputType: accm}

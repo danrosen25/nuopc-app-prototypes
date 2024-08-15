@@ -119,12 +119,13 @@ module genio_mod_field
 
   !-----------------------------------------------------------------------------
 
-  function genio_srclst_create(state, outpcfg, name, rc)
+  function genio_srclst_create(state, outpcfg, dflts, name, rc)
     ! return value
     type(genio_srclst) :: genio_srclst_create
     ! arguments
     type(ESMF_State), intent(inout) :: state
     type(ESMF_HConfig), intent(in)  :: outpcfg
+    type(genio_dflts), intent(in)   :: dflts
     character(*), intent(in)        :: name
     integer, intent(out)            :: rc
     ! local variables
@@ -164,12 +165,12 @@ module genio_mod_field
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    genio_srclst_create%write = genio_hconfig2logical(outpcfg, "write_src", &
-      defaultValue=.false., rc=rc)
+    genio_srclst_create%write = genio_hconfig2logical(outpcfg, &
+      "writeSrc", defaultValue=.false., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    genio_srclst_create%diagn = genio_hconfig2logical(outpcfg, "print_src", &
-      defaultValue=.false., rc=rc)
+    genio_srclst_create%diagn = genio_hconfig2logical(outpcfg, &
+      "diagnosticSrc", defaultValue=.false., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -598,12 +599,14 @@ module genio_mod_field
   !-----------------------------------------------------------------------------
   !-----------------------------------------------------------------------------
 
-  function genio_outlst_create(srclst, outpcfg, name, rc)
+  function genio_outlst_create(srclst, outpcfg, fldscfg, dflts, name, rc)
     ! return value
     type(genio_outlst) :: genio_outlst_create
     ! arguments
     type(genio_srclst), intent(in)      :: srclst
     type(ESMF_HConfig), intent(in)      :: outpcfg
+    type(ESMF_HConfig), intent(in)      :: fldscfg
+    type(genio_dflts), intent(in)       :: dflts
     character(*), intent(in)            :: name
     integer, intent(out)                :: rc
     ! local variables
@@ -614,18 +617,21 @@ module genio_mod_field
     character(:), allocatable :: fname
     type(ESMF_Geom)           :: geom
     real(ESMF_KIND_R8)        :: r8
+    logical                    :: crrfcfg_p
+    logical                    :: otypcfg_p
+    type(ESMF_HConfig)         :: crrfcfg
 
     rc = ESMF_SUCCESS
 
     genio_outlst_create%name = name
     genio_outlst_create%slice = 0
-    genio_outlst_create%wfinl = genio_hconfig2logical(outpcfg, "final_out", &
-      defaultValue=.false., rc=rc)
+    genio_outlst_create%wfinl = genio_hconfig2logical(outpcfg, &
+      "writeFinal", defaultValue=.false., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     ! diagnostics
-    genio_outlst_create%diagn = genio_hconfig2logical(outpcfg, "print_out", &
-      defaultValue=.false., rc=rc)
+    genio_outlst_create%diagn = genio_hconfig2logical(outpcfg, &
+      "diagnosticOut", defaultValue=.false., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     ! default time interval
@@ -668,7 +674,26 @@ module genio_mod_field
         dataFillScheme="const", const1=0.0_ESMF_KIND_R8, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      genio_outlst_create%fld(i)%otyp = GENIO_ACCM
+      ! field configuration
+      crrfcfg_p = ESMF_HConfigIsDefined(fldscfg, &
+        keyString=srclst%fld(i)%name, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (crrfcfg_p) then
+        crrfcfg = ESMF_HConfigCreateAt(fldscfg, &
+          keyString=srclst%fld(i)%name, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        genio_outlst_create%fld(i)%otyp = genio_hconfig2otyp(crrfcfg, &
+          "outputType", defaultValue=dflts%otyp, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call ESMF_HConfigDestroy(crrfcfg, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      else
+        genio_outlst_create%fld(i)%otyp = dflts%otyp
+      endif
       if (genio_outlst_create%fld(i)%otyp .eq. GENIO_INST) then
         genio_outlst_create%fld(i)%ostr = "(inst)"
       elseif (genio_outlst_create%fld(i)%otyp .eq. GENIO_ACCM) then
