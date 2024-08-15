@@ -16,6 +16,7 @@ module genio_mod_geom
 
   use ESMF
   use genio_mod_struct
+  use genio_mod_params
   use genio_mod_util
 
   implicit none
@@ -108,12 +109,20 @@ module genio_mod_geom
     ! arguments
     type(genio_geom), intent(inout) :: geom
     integer, intent(out)            :: rc
+    ! local variables
+    logical :: gridCreated
 
     rc = ESMF_SUCCESS
 
-    call ESMF_GridDestroy(geom%grid, rc=rc)
+    gridCreated = ESMF_GridIsCreated(geom%grid, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+
+    if (gridCreated) then
+      call ESMF_GridDestroy(geom%grid, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    endif
 
   endsubroutine genio_geom_destroy
 

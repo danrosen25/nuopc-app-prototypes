@@ -5,7 +5,7 @@ find_package(ESMF 8.6.0 MODULE REQUIRED)
 
 set(CMAKE_Fortran_COMPILER "${ESMF_F90COMPILER}")
 
-project(GenIO
+project(GENATM
         VERSION 1.0
         LANGUAGES Fortran)
 
@@ -24,17 +24,12 @@ else()
   message(WARNING "${CMAKE_Fortran_COMPILER_ID} Fortran compiler will be used with default options")
 endif()
 
-add_library(GenIO genio.F90
-                  genio_field.F90
-                  genio_geom.F90
-                  genio_util.F90
-                  genio_struct.F90
-                  genio_params.F90)
-target_link_libraries(GenIO PUBLIC ESMF)
-target_link_libraries(GenIO PUBLIC OpenMP::OpenMP_Fortran)
+add_library(genatm genatm.F90)
+target_link_libraries(genatm PUBLIC ESMF)
+target_link_libraries(genatm PUBLIC OpenMP::OpenMP_Fortran)
 
-install(TARGETS GenIO
-        EXPORT GenIO
+install(TARGETS genatm
+        EXPORT genatm
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         INCLUDES DESTINATION mod
@@ -45,4 +40,4 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
         PATTERN "*.mod"
         PATTERN "CMakeFiles" EXCLUDE
 )
-install(EXPORT GenIO DESTINATION cmake)
+install(EXPORT genatm DESTINATION cmake)

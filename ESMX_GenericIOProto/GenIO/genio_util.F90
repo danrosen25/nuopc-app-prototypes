@@ -16,6 +16,7 @@ module genio_mod_util
 
   use ESMF
   use genio_mod_struct
+  use genio_mod_params
 
   implicit none
 
@@ -25,8 +26,9 @@ module genio_mod_util
   public genio_hconfig2r8
   public genio_hconfig2str
   public genio_hconfig2logical
-  public genio_hconfig2control
+  public genio_hconfig2timeint
   public genio_hconfig2csys
+  public genio_hconfig2ftyp
 
   contains
 
@@ -194,7 +196,7 @@ module genio_mod_util
       genio_hconfig2logical = defaultValue
     else
       call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
-        msg="GENIO: Key not found - "//trim(key), &
+        msg="GENIO: logical key not found - "//trim(key), &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif
@@ -202,22 +204,35 @@ module genio_mod_util
 
   !-----------------------------------------------------------------------------
 
-  function genio_hconfig2control(hconfig, key, defaultValue, rc)
+  function genio_hconfig2timeint(hconfig, key, defaultValue, rc)
     ! return value
-    integer :: genio_hconfig2control
+    type(ESMF_TimeInterval) :: genio_hconfig2timeint
     ! arguments
-    type(ESMF_HConfig), intent(in) :: hconfig
-    character(*), intent(in)       :: key
-    integer, intent(in), optional  :: defaultValue
-    integer, intent(out)           :: rc
+    type(ESMF_HConfig), intent(in)                 :: hconfig
+    character(*), intent(in)                       :: key
+    type(ESMF_TimeInterval), intent(in), optional  :: defaultValue
+    integer, intent(out)                           :: rc
     ! local variables
     character(len=:), allocatable :: strValue
-    logical :: isPresent
-    logical :: check
+    logical                       :: isPresent
+    logical                       :: check
+    integer(ESMF_KIND_I4)         :: yy
+    integer(ESMF_KIND_I4)         :: mm
+    integer(ESMF_KIND_I4)         :: d
+    integer(ESMF_KIND_I4)         :: h
+    integer(ESMF_KIND_I4)         :: m
+    integer(ESMF_KIND_I4)         :: s
+    character                     :: x1
+    character                     :: x2
+    character                     :: x3
+    character                     :: x4
+    character                     :: x5
 
     rc = ESMF_SUCCESS
 
-    genio_hconfig2control = GENIO_FCTRL_OPTIONAL
+    call ESMF_TimeIntervalSet(genio_hconfig2timeint, s=0, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
     isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -229,37 +244,31 @@ module genio_mod_util
         line=__LINE__, file=__FILE__)) return
       if (.not.check) then
         call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-          msg="GENIO: Field control cannot be converted to String", &
+          msg="GENIO: TimeInterval cannot be converted to String", &
           line=__LINE__, file=__FILE__, rcToReturn=rc)
         return
       endif
-      strValue = ESMF_UtilStringLowerCase(strValue, rc=rc)
+      read(strValue, '(I4,5(A1,I2))', err=8) yy, x1, mm, x2, d, x3, h, x4, m, x5, s
+      deallocate(strValue)
+      call ESMF_TimeIntervalSet(genio_hconfig2timeint, &
+        yy=yy, mm=mm, d=d, h=h, m=m, s=s, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
-      select case (strValue)
-        case ("disabled","off")
-          genio_hconfig2control = GENIO_FCTRL_DISABLED
-        case ("optional")
-          genio_hconfig2control = GENIO_FCTRL_OPTIONAL
-        case ("required","on")
-          genio_hconfig2control = GENIO_FCTRL_REQUIRED
-        case default
-          call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
-            msg="GENIO: Field control is invalid - "//trim(strValue), &
-            line=__LINE__, file=__FILE__, rcToReturn=rc)
-        return
-      endselect
-      deallocate(strValue)
     elseif (present(defaultValue)) then
-      genio_hconfig2control = defaultValue
+      genio_hconfig2timeint = defaultValue
     else
       call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
-        msg="GENIO: Field control not found", &
+        msg="GENIO: timeint key not found - "//trim(key), &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif
 
-  endfunction genio_hconfig2control
+4   return
+8   call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
+      msg="GENIO: TimeInterval format ISO 8601 - "//strValue, &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)
+
+  endfunction genio_hconfig2timeint
 
   !-----------------------------------------------------------------------------
 
@@ -315,12 +324,73 @@ module genio_mod_util
       genio_hconfig2csys = defaultValue
     else
       call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
-        msg="GENIO: Field coordSys not found", &
+        msg="GENIO: csys key not found - "//trim(key), &
         line=__LINE__, file=__FILE__, rcToReturn=rc)
       return
     endif
 
   endfunction genio_hconfig2csys
+
+  !-----------------------------------------------------------------------------
+
+  function genio_hconfig2ftyp(hconfig, key, defaultValue, rc)
+    ! return value
+    integer :: genio_hconfig2ftyp
+    ! arguments
+    type(ESMF_HConfig), intent(in) :: hconfig
+    character(*), intent(in)       :: key
+    integer, intent(in), optional  :: defaultValue
+    integer, intent(out)           :: rc
+    ! local variables
+    character(len=:), allocatable :: strValue
+    logical                       :: isPresent
+    logical                       :: check
+
+    rc = ESMF_SUCCESS
+
+    genio_hconfig2ftyp = GENIO_ERROR
+
+    isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    if (isPresent) then
+      strValue = ESMF_HConfigAsString(hconfig, keyString=key, asOkay=check, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (.not.check) then
+        call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+          msg="GENIO: Field ftyp cannot be converted to String", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      strValue = ESMF_UtilStringUpperCase(strValue, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      select case (strValue)
+        case ("MEAN","GENIO_MEAN")
+          genio_hconfig2ftyp = GENIO_MEAN
+        case ("INST","GENIO_INST","INSTANTANEOUS")
+          genio_hconfig2ftyp = GENIO_INST
+        case ("ACCM","GENIO_ACCM","ACCUMULATE")
+          genio_hconfig2ftyp = GENIO_ACCM
+        case default
+          call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+            msg="GENIO: Field output type is invalid - "//trim(strValue), &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endselect
+      deallocate(strValue)
+    elseif (present(defaultValue)) then
+      genio_hconfig2ftyp = defaultValue
+    else
+      call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
+        msg="GENIO: ftyp key not found - "//trim(key), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+
+  endfunction genio_hconfig2ftyp
 
   !-----------------------------------------------------------------------------
 

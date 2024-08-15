@@ -15,43 +15,31 @@ ESMX:
     runSequence: |
       @900
         ATM
-        ATM -> IO
+        ATM -> IO :remapMethod=redist
         IO
       @
 
 ATM:
-  model:            ESMX_Data   # use the ESMX data component
-  ompNumThreads:    4
+  model:            GenATM
   attributes:
     Verbosity:  0
-  petList:          [0-2]  # petList is list of scalars and lists.
-                                # each list again can be of scalars and lists
-                                # recursively.
-  geom:
-    nx: 10
-    ny: 100
-    minx: 10.
-    miny: 20.
-    maxx: 100.
-    maxy: 200.
-    coordSys: ESMF_COORDSYS_CART
+    Diagnostic: 0
+  petList:          [0-2]
 
-  exportFields:
-    surface_downward_water_flux:          {dim: 2, val: 2.5}
-    precipitation_flux:                   {dim: 2, val: 3.5}
-    surface_net_downward_shortwave_flux:  {dim: 3, val: 4.5}
-
-  output:
-    write_final: false
 
 IO:
   model:            GenIO
   petList:          [3]
   attributes:
     Verbosity:  low
-  output:
-    write_final: true
-  fieldOptions:
-    air_pressure_at_sea_level:            {control: optional}
-    precipitation_flux:                   {control: required}
-    surface_net_downward_shortwave_flux:  {control: disabled}
+    Diagnostic: 0
+  outputOptions:
+    print_src: false
+    write_src: false
+    print_out: true
+    final_out: false
+    frequency: 0000-00-00T00:30:00
+    fieldset: [surface_downward_water_flux,
+               precipitation_flux,
+#               surface_net_downward_shortwave_flux
+              ]
