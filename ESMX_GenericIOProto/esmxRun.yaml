@@ -9,27 +9,21 @@ ESMX:
     stopTime:               2012-10-24T19:00:00
 
   Driver:
-    componentList:          [ATM, IO]
+    componentList:          [IO, ATM, OCN]
     attributes:
       Verbosity: low
     runSequence: |
       @900
         ATM
+        OCN
         ATM -> IO :remapMethod=redist
+        OCN -> IO :remapMethod=redist
         IO
       @
 
-ATM:
-  model:            GenATM
-  attributes:
-    Verbosity:  0
-    Diagnostic: 0
-  petList:          [0-2]
-
-
 IO:
   model:            GenIO
-  petList:          [3]
+  petList:          [2-3]
   attributes:
     Verbosity:  low
     Diagnostic: 0
@@ -41,9 +35,45 @@ IO:
     writeSrc: false
     writeFinal: false
     frequency: 0000-00-00T00:30:00
-    fieldset: [surface_downward_water_flux,
+    fieldset: [air_pressure_at_sea_level,
                precipitation_flux,
-#               surface_net_downward_shortwave_flux
+#               surface_net_downward_shortwave_flux,
+               sea_surface_temperature
               ]
   fieldOptions:
     precipitation_flux: {outputType: accm}
+    sea_surface_temperature: {outputType: mean}
+
+####################
+# Other Components #
+####################
+
+# Atmospheric Component (Generic ATM)
+
+ATM:
+  model:            GenATM
+  attributes:
+    Verbosity:  0
+    Diagnostic: 0
+  petList:          [0-1]
+
+# Ocean Component (ESMX Data)
+
+OCN:
+  model:            ESMX_Data
+  attributes:
+    Verbosity:  0
+    Diagnostic: 0
+  petList:          [0-1]
+  geom:
+    nx: 10
+    ny: 10
+    minx: 10.
+    miny: 20.
+    maxx: 100.
+    maxy: 200.
+    coordSys: ESMF_COORDSYS_CART
+  exportFields:
+    sea_surface_temperature: {dim: 2, val: 293.15}
+  output:
+    write_final: false

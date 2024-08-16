@@ -127,9 +127,9 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! exportable field: surface_downward_water_flux
+    ! exportable field: air_pressure_at_sea_level
     call NUOPC_Advertise(exportState, &
-      StandardName="surface_downward_water_flux", rc=rc)
+      StandardName="air_pressure_at_sea_level", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
@@ -241,8 +241,8 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! exportable field on Grid: surface_downward_water_flux
-    field = ESMF_FieldCreate(name="surface_downward_water_flux", &
+    ! exportable field on Grid: air_pressure_at_sea_level
+    field = ESMF_FieldCreate(name="air_pressure_at_sea_level", &
       grid=gridOut, typekind=ESMF_TYPEKIND_R8, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -306,9 +306,9 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! exportable field on Grid: surface_downward_water_flux
+    ! exportable field on Grid: air_pressure_at_sea_level
     call ESMF_StateGet(exportState, field=field, &
-      itemName="surface_downward_water_flux", rc=rc)
+      itemName="air_pressure_at_sea_level", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call ESMF_FieldFill(field, dataFillScheme="sincos", member=1, step=0, rc=rc)
@@ -424,9 +424,9 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    ! exportable field on Grid: surface_downward_water_flux
+    ! exportable field on Grid: air_pressure_at_sea_level
     call ESMF_StateGet(exportState, field=field, &
-      itemName="surface_downward_water_flux", rc=rc)
+      itemName="air_pressure_at_sea_level", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     call ESMF_FieldGet(field, localDe=0, farrayPtr=fptrR8D2, rc=rc)
