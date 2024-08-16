@@ -24,12 +24,12 @@ else()
   message(WARNING "${CMAKE_Fortran_COMPILER_ID} Fortran compiler will be used with default options")
 endif()
 
-add_library(genatm genatm.F90)
-target_link_libraries(genatm PUBLIC ESMF)
-target_link_libraries(genatm PUBLIC OpenMP::OpenMP_Fortran)
+add_library(GenATM genatm.F90)
+target_link_libraries(GenATM PUBLIC ESMF)
+target_link_libraries(GenATM PUBLIC OpenMP::OpenMP_Fortran)
 
-install(TARGETS genatm
-        EXPORT genatm
+install(TARGETS GenATM
+        EXPORT GenATM
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         INCLUDES DESTINATION mod
@@ -40,4 +40,4 @@ install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
         PATTERN "*.mod"
         PATTERN "CMakeFiles" EXCLUDE
 )
-install(EXPORT genatm DESTINATION cmake)
+install(EXPORT GenATM DESTINATION cmake)
