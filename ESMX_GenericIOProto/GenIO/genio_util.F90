@@ -29,6 +29,8 @@ module genio_mod_util
   public genio_hconfig2timeint
   public genio_hconfig2csys
   public genio_hconfig2otyp
+  public genio_hconfig2gtyp
+  public genio_hconfig2ffmt
 
   contains
 
@@ -394,5 +396,126 @@ module genio_mod_util
 
   !-----------------------------------------------------------------------------
 
+  function genio_hconfig2gtyp(hconfig, key, defaultValue, rc)
+    ! return value
+    type(ESMF_GeomType_Flag) :: genio_hconfig2gtyp
+    ! arguments
+    type(ESMF_HConfig), intent(in)                  :: hconfig
+    character(*), intent(in)                        :: key
+    type(ESMF_GeomType_Flag) , intent(in), optional :: defaultValue
+    integer, intent(out)                            :: rc
+    ! local variables
+    character(len=:), allocatable :: strValue
+    logical                       :: isPresent
+    logical                       :: check
+
+    rc = ESMF_SUCCESS
+
+    genio_hconfig2gtyp = ESMF_GEOMTYPE_GRID
+
+    isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    if (isPresent) then
+      strValue = ESMF_HConfigAsString(hconfig, keyString=key, asOkay=check, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (.not.check) then
+        call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+          msg="GENIO: Key cannot be converted to String", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      strValue = ESMF_UtilStringUpperCase(strValue, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      select case (strValue)
+        case ("GRID","ESMF_GEOMTYPE_GRID")
+          genio_hconfig2gtyp = ESMF_GEOMTYPE_GRID
+        case ("MESH","ESMF_GEOMTYPE_MESH")
+          genio_hconfig2gtyp = ESMF_GEOMTYPE_MESH
+        case ("XGRID","ESMF_GEOMTYPE_XGRID")
+          genio_hconfig2gtyp = ESMF_GEOMTYPE_XGRID
+        case ("LOCSTREAM","ESMF_GEOMTYPE_LOCSTREAM")
+          genio_hconfig2gtyp = ESMF_GEOMTYPE_LOCSTREAM
+        case default
+          call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+            msg="GENIO: Geom type is invalid - "//trim(strValue), &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endselect
+      deallocate(strValue)
+    elseif (present(defaultValue)) then
+      genio_hconfig2gtyp = defaultValue
+    else
+      call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
+        msg="GENIO: Key not found - "//trim(key), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+
+  endfunction genio_hconfig2gtyp
+
+  !-----------------------------------------------------------------------------
+
+  function genio_hconfig2ffmt(hconfig, key, defaultValue, rc)
+    ! return value
+    type(ESMF_FileFormat_Flag) :: genio_hconfig2ffmt
+    ! arguments
+    type(ESMF_HConfig), intent(in)                   :: hconfig
+    character(*), intent(in)                         :: key
+    type(ESMF_FileFormat_Flag), intent(in), optional :: defaultValue
+    integer, intent(out)                             :: rc
+    ! local variables
+    character(len=:), allocatable :: strValue
+    logical                       :: isPresent
+    logical                       :: check
+
+    rc = ESMF_SUCCESS
+
+    genio_hconfig2ffmt = ESMF_FILEFORMAT_ESMFMESH
+
+    isPresent = ESMF_HConfigIsDefined(hconfig, keyString=key, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    if (isPresent) then
+      strValue = ESMF_HConfigAsString(hconfig, keyString=key, asOkay=check, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      if (.not.check) then
+        call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+          msg="GENIO: Key cannot be converted to String", &
+          line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endif
+      strValue = ESMF_UtilStringUpperCase(strValue, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+      select case (strValue)
+        case ("SCRIP","ESMF_FILEFORMAT_SCRIP")
+          genio_hconfig2ffmt = ESMF_FILEFORMAT_SCRIP
+        case ("ESMFMESH","ESMF_FILEFORMAT_ESMFMESH")
+          genio_hconfig2ffmt = ESMF_FILEFORMAT_ESMFMESH
+        case ("UGRID","ESMF_FILEFORMAT_UGRID")
+          genio_hconfig2ffmt = ESMF_FILEFORMAT_UGRID
+        case default
+          call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+            msg="GENIO: File format is invalid - "//trim(strValue), &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+        return
+      endselect
+      deallocate(strValue)
+    elseif (present(defaultValue)) then
+      genio_hconfig2ffmt = defaultValue
+    else
+      call ESMF_LogSetError(ESMF_RC_NOT_FOUND, &
+        msg="GENIO: Key not found - "//trim(key), &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
+    endif
+
+  endfunction genio_hconfig2ffmt
 
 endmodule genio_mod_util

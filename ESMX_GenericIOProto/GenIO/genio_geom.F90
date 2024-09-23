@@ -23,9 +23,9 @@ module genio_mod_geom
 
   private
 
-  public genio_geom_create
-  public genio_geom_destroy
-  public genio_geom_write
+  public genio_geolst_create
+  public genio_geolst_destroy
+  public genio_geolst_write
 
   contains
 
@@ -33,29 +33,108 @@ module genio_mod_geom
   ! Generic IO Geom Subroutines
   !-----------------------------------------------------------------------------
 
-  function genio_geom_create(geomcfg, dflts, rc)
+  function genio_geolst_create(geolcfg, dflts, rc)
     ! return value
-    type(genio_geom) :: genio_geom_create
+    type(genio_geom), allocatable :: genio_geolst_create(:)
     ! arguments
-    type(ESMF_HConfig), intent(in) :: geomcfg
+    type(ESMF_HConfig), intent(in) :: geolcfg
     type(genio_dflts), intent(in)  :: dflts
     integer, intent(out)           :: rc
     ! local variables
-    logical                   :: check
-    character(:), allocatable :: badKey
+    integer            :: i
+    integer            :: gcnt
+    integer            :: stat
+    type(ESMF_HConfig) :: geomcfg
+    type(ESMF_Grid)    :: grid
+    type(ESMF_Mesh)    :: mesh
 
     rc = ESMF_SUCCESS
 
+    gcnt = ESMF_HConfigGetSize(geolcfg, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    allocate(genio_geolst_create(gcnt), stat=stat)
+    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+      msg='GENIO: Memory allocation failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+
+    do i=1, gcnt
+        geomcfg = ESMF_HConfigCreateAt(geolcfg, index=i, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        genio_geolst_create(i)%name = genio_hconfig2str(geomcfg, &
+          key="name", rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        genio_geolst_create(i)%gtyp = genio_hconfig2gtyp(geomcfg, &
+          key="geomtype", rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        if (genio_geolst_create(i)%gtyp .eq. ESMF_GEOMTYPE_GRID) then
+          grid = genio_grid_create(genio_geolst_create(i)%name, &
+            gridcfg=geomcfg, dflts=dflts, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+          genio_geolst_create(i)%geom = ESMF_GeomCreate(grid, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        elseif (genio_geolst_create(i)%gtyp .eq. ESMF_GEOMTYPE_MESH) then
+          mesh = genio_mesh_create(genio_geolst_create(i)%name, &
+            meshcfg=geomcfg, dflts=dflts, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+          genio_geolst_create(i)%geom = ESMF_GeomCreate(mesh, rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, file=__FILE__)) return
+        else
+          call ESMF_LogSetError(ESMF_RC_NOT_IMPL, &
+            msg="GENIO: geom type not supported", &
+            line=__LINE__, file=__FILE__, rcToReturn=rc)
+          return
+        endif
+        call ESMF_HConfigDestroy(geomcfg, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+    enddo
+
+  endfunction genio_geolst_create
+
+  !-----------------------------------------------------------------------------
+
+  function genio_grid_create(name, gridcfg, dflts, rc)
+    ! return value
+    type(ESMF_Grid) :: genio_grid_create
+    ! arguments
+    character(*), intent(in)       :: name
+    type(ESMF_HConfig), intent(in) :: gridcfg
+    type(genio_dflts), intent(in)  :: dflts
+    integer, intent(out)           :: rc
+    ! local variables
+    integer                         :: i
+    integer                         :: stat
+    logical                         :: check
+    character(:), allocatable       :: badKey
+    type(ESMF_CoordSys_Flag)        :: coordSys
+    integer                         :: dimCount
+    integer, allocatable            :: maxIndex(:)
+    real(ESMF_KIND_R8), allocatable :: minCornerCoord(:)
+    real(ESMF_KIND_R8), allocatable :: maxCornerCoord(:)
+
+    rc = ESMF_SUCCESS
+
+    genio_grid_create = ESMF_GridEmptyCreate(rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
     ! check configuration
-    check = ESMF_HConfigValidateMapKeys(geomcfg, &
-      vocabulary=["nx      ", &
-                  "ny      ", &
-                  "nz      ", &
-                  "coordSys", &
-                  "minx    ", &
-                  "maxx    ", &
-                  "miny    ", &
-                  "maxy    "  &
+    check = ESMF_HConfigValidateMapKeys(gridcfg, &
+      vocabulary=["name          ", &
+                  "geomtype      ", &
+                  "coordSys      ", &
+                  "maxIndex      ", &
+                  "minCornerCoord", &
+                  "maxCornerCoord"  &
                  ], badKey=badKey, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -66,72 +145,181 @@ module genio_mod_geom
       return
     endif
 
-    ! dimensions
-    genio_geom_create%nx = genio_hconfig2i4(geomcfg, "nx", &
-      defaultValue=dflts%nx, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    genio_geom_create%ny = genio_hconfig2i4(geomcfg, "ny", &
-      defaultValue=dflts%ny, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    genio_geom_create%nz = genio_hconfig2i4(geomcfg, "nz", &
-      defaultValue=dflts%nz, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, file=__FILE__)) return
-    ! coordinate system
-    genio_geom_create%csys = genio_hconfig2csys(geomcfg, "coordSys", &
+    ! coordSys
+    coordSys = genio_hconfig2csys(gridcfg, key="coordSys", &
       defaultValue=dflts%csys, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    ! coordinates
-    genio_geom_create%minx = genio_hconfig2r8(geomcfg, "minx", &
-      defaultValue=dflts%minx, rc=rc)
+    ! maxIndex
+    dimCount = ESMF_HConfigGetSize(gridcfg, keyString="maxIndex", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    genio_geom_create%maxx = genio_hconfig2r8(geomcfg, "maxx", &
-      defaultValue=dflts%maxx, rc=rc)
+    allocate(maxIndex(dimCount), stat=stat)
+    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+      msg='GENIO: Memory allocation failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+    maxIndex = ESMF_HConfigAsI4Seq(gridcfg, keyString="maxIndex", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    genio_geom_create%miny = genio_hconfig2r8(geomcfg, "miny", &
-      defaultValue=dflts%miny, rc=rc)
+    ! minCornerCoord
+    dimCount = ESMF_HConfigGetSize(gridcfg, keyString="minCornerCoord", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    genio_geom_create%maxy = genio_hconfig2r8(geomcfg, "maxy", &
-      defaultValue=dflts%maxy, rc=rc)
+    allocate(minCornerCoord(dimCount), stat=stat)
+    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+      msg='GENIO: Memory allocation failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+    minCornerCoord = ESMF_HConfigAsR8Seq(gridcfg, keyString="minCornerCoord", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-  endfunction genio_geom_create
+    ! maxCornerCoord
+    dimCount = ESMF_HConfigGetSize(gridcfg, keyString="maxCornerCoord", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    allocate(maxCornerCoord(dimCount), stat=stat)
+    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
+      msg='GENIO: Memory allocation failed.', &
+      line=__LINE__, file=__FILE__, rcToReturn=rc)) return
+    maxCornerCoord = ESMF_HConfigAsR8Seq(gridcfg, keyString="maxCornerCoord", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    ! ESMF_GridCreate
+    genio_grid_create = ESMF_GridCreateNoPeriDimUfrm(maxIndex=maxIndex, &
+      minCornerCoord=minCornerCoord, maxCornerCoord=maxCornerCoord, &
+      coordSys=coordSys, name=name, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    deallocate(maxIndex, stat=stat)
+    deallocate(minCornerCoord, stat=stat)
+    deallocate(maxCornerCoord, stat=stat)
+
+  endfunction genio_grid_create
 
   !-----------------------------------------------------------------------------
 
-  subroutine genio_geom_destroy(geom, rc)
+  function genio_mesh_create(name, meshcfg, dflts, rc)
+    ! return value
+    type(ESMF_Mesh) :: genio_mesh_create
     ! arguments
-    type(genio_geom), intent(inout) :: geom
-    integer, intent(out)            :: rc
+    character(*), intent(in)       :: name
+    type(ESMF_HConfig), intent(in) :: meshcfg
+    type(genio_dflts), intent(in)  :: dflts
+    integer, intent(out)           :: rc
     ! local variables
-    logical :: gridCreated
+    integer                         :: i
+    integer                         :: stat
+    logical                         :: check
+    character(:), allocatable       :: badKey
+    type(ESMF_CoordSys_Flag)        :: coordSys
+    character(len=ESMF_MAXSTR)      :: filename
+    type(ESMF_FileFormat_Flag)      :: fileformat
 
     rc = ESMF_SUCCESS
 
-    gridCreated = ESMF_GridIsCreated(geom%grid, rc=rc)
+    genio_mesh_create = ESMF_MeshEmptyCreate(rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
-    if (gridCreated) then
-      call ESMF_GridDestroy(geom%grid, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    ! check configuration
+    check = ESMF_HConfigValidateMapKeys(meshcfg, &
+      vocabulary=["name          ", &
+                  "geomtype      ", &
+                  "coordSys      ", &
+                  "filename      ", &
+                  "fileformat    "  &
+                 ], badKey=badKey, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    if (.not. check) then
+      call ESMF_LogSetError(ESMF_RC_NOT_VALID, &
+        msg="GENIO: unknown option in defaults "//badKey, &
+        line=__LINE__, file=__FILE__, rcToReturn=rc)
+      return
     endif
 
-  endsubroutine genio_geom_destroy
+    ! coordSys
+    coordSys = genio_hconfig2csys(meshcfg, key="coordSys", &
+      defaultValue=dflts%csys, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    ! filename
+    filename = ESMF_HConfigAsString(meshcfg, keyString="filename", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    ! fileformat
+    fileformat = genio_hconfig2ffmt(meshcfg, key="fileformat", &
+      defaultValue=dflts%ffmt, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! ESMF_MeshCreate
+    genio_mesh_create = ESMF_MeshCreate(filename=filename, &
+      fileformat=fileformat, coordSys=coordSys, name=name, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+  endfunction genio_mesh_create
 
   !-----------------------------------------------------------------------------
 
-  subroutine genio_geom_write(geom, overwrite, status, timeslice, iofmt, &
+  subroutine genio_geolst_destroy(geolst, rc)
+    ! arguments
+    type(genio_geom), allocatable, intent(inout) :: geolst(:)
+    integer, intent(out)                         :: rc
+    ! local variables
+    integer :: i
+    integer :: stat
+
+    rc = ESMF_SUCCESS
+
+    do i=1, size(geolst)
+      call ESMF_GeomDestroy(geolst(i)%geom, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    enddo
+    deallocate(geolst, stat=stat)
+
+  endsubroutine genio_geolst_destroy
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_geolst_write(geolst, overwrite, status, timeslice, iofmt, &
   relaxedflag, rc)
     ! arguments
-    type(genio_geom), intent(in)                     :: geom
+    type(genio_geom), allocatable, intent(in)        :: geolst(:)
+    logical, intent(in), optional                    :: overwrite
+    type(ESMF_FileStatus_Flag), intent(in), optional :: status
+    integer, intent(in), optional                    :: timeslice
+    type(ESMF_IOFmt_Flag), intent(in), optional      :: iofmt
+    logical, intent(in), optional                    :: relaxedflag
+    integer, intent(out)                             :: rc
+    ! local variables
+    integer         :: i
+    type(ESMF_Grid) :: grid
+
+    rc = ESMF_SUCCESS
+
+    do i=1, size(geolst)
+      if (geolst(i)%gtyp .eq. ESMF_GEOMTYPE_GRID) then
+        call ESMF_GeomGet(geolst(i)%geom, grid=grid, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+        call genio_grid_write(grid, overwrite=overwrite, status=status, &
+          timeslice=timeslice, iofmt=iofmt, relaxedflag=relaxedflag, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, file=__FILE__)) return
+      endif
+    enddo
+
+  endsubroutine genio_geolst_write
+
+  !-----------------------------------------------------------------------------
+
+  subroutine genio_grid_write(grid, overwrite, status, timeslice, iofmt, &
+  relaxedflag, rc)
+    ! arguments
+    type(ESMF_Grid), intent(in)                      :: grid
     logical, intent(in), optional                    :: overwrite
     type(ESMF_FileStatus_Flag), intent(in), optional :: status
     integer, intent(in), optional                    :: timeslice
@@ -163,7 +351,8 @@ module genio_mod_geom
     endif
 
     if (doItFlag) then
-      call ESMF_GridGet(geom%grid, name=gridName, rc=rc)
+
+      call ESMF_GridGet(grid, name=gridName, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
 
@@ -173,12 +362,12 @@ module genio_mod_geom
 
       ! -- centers --
 
-      call ESMF_GridGetCoord(geom%grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+      call ESMF_GridGetCoord(grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
         isPresent=isPresent, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       if (isPresent) then
-        call ESMF_GridGetCoord(geom%grid, coordDim=1, &
+        call ESMF_GridGetCoord(grid, coordDim=1, &
           staggerLoc=ESMF_STAGGERLOC_CENTER, array=array, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, file=__FILE__)) return
@@ -188,7 +377,7 @@ module genio_mod_geom
         call ESMF_ArrayBundleAdd(arraybundle,(/array/),rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, file=__FILE__)) return
-        call ESMF_GridGetCoord(geom%grid, coordDim=2, &
+        call ESMF_GridGetCoord(grid, coordDim=2, &
           staggerLoc=ESMF_STAGGERLOC_CENTER, array=array, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, file=__FILE__)) return
@@ -202,12 +391,12 @@ module genio_mod_geom
 
       ! -- corners --
 
-      call ESMF_GridGetCoord(geom%grid, staggerLoc=ESMF_STAGGERLOC_CORNER, &
+      call ESMF_GridGetCoord(grid, staggerLoc=ESMF_STAGGERLOC_CORNER, &
         isPresent=hasCorners, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       if (hasCorners) then
-        call ESMF_GridGetCoord(geom%grid, coordDim=1, &
+        call ESMF_GridGetCoord(grid, coordDim=1, &
           staggerLoc=ESMF_STAGGERLOC_CORNER, array=array, rc=rc)
         if (.not. ESMF_LogFoundError(rcToCheck=rc)) then
           call ESMF_ArraySet(array, name="lon_corner", rc=rc)
@@ -217,7 +406,7 @@ module genio_mod_geom
           if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
             line=__LINE__, file=__FILE__)) return
         endif
-        call ESMF_GridGetCoord(geom%grid, coordDim=2, &
+        call ESMF_GridGetCoord(grid, coordDim=2, &
           staggerLoc=ESMF_STAGGERLOC_CORNER, array=array, rc=rc)
         if (.not. ESMF_LogFoundError(rcToCheck=rc)) then
           call ESMF_ArraySet(array, name="lat_corner", rc=rc)
@@ -231,12 +420,12 @@ module genio_mod_geom
 
       ! -- mask --
 
-      call ESMF_GridGetItem(geom%grid, itemflag=ESMF_GRIDITEM_MASK, &
+      call ESMF_GridGetItem(grid, itemflag=ESMF_GRIDITEM_MASK, &
         staggerLoc=ESMF_STAGGERLOC_CENTER, isPresent=isPresent, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       if (isPresent) then
-        call ESMF_GridGetItem(geom%grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+        call ESMF_GridGetItem(grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
           itemflag=ESMF_GRIDITEM_MASK, array=array, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, file=__FILE__)) return
@@ -250,12 +439,12 @@ module genio_mod_geom
 
       ! -- area --
 
-      call ESMF_GridGetItem(geom%grid, itemflag=ESMF_GRIDITEM_AREA, &
+      call ESMF_GridGetItem(grid, itemflag=ESMF_GRIDITEM_AREA, &
         staggerLoc=ESMF_STAGGERLOC_CENTER, isPresent=isPresent, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       if (isPresent) then
-        call ESMF_GridGetItem(geom%grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
+        call ESMF_GridGetItem(grid, staggerLoc=ESMF_STAGGERLOC_CENTER, &
           itemflag=ESMF_GRIDITEM_AREA, array=array, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, file=__FILE__)) return
@@ -276,7 +465,7 @@ module genio_mod_geom
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     endif
-  endsubroutine genio_geom_write
+  endsubroutine genio_grid_write
 
   !-----------------------------------------------------------------------------
 

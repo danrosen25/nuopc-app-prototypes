@@ -31,16 +31,17 @@ module genio_mod_struct
   public geniostate_wrap
 
   type genio_dflts
-    real(ESMF_KIND_R8)       :: filv = GENIO_FILV
-    integer                  :: nx   = GENIO_DFLT_NX
-    integer                  :: ny   = GENIO_DFLT_NY
-    integer                  :: nz   = GENIO_DFLT_NZ
-    real(ESMF_KIND_R8)       :: minx = GENIO_DFLT_MINX
-    real(ESMF_KIND_R8)       :: maxx = GENIO_DFLT_MAXX
-    real(ESMF_KIND_R8)       :: miny = GENIO_DFLT_MINY
-    real(ESMF_KIND_R8)       :: maxy = GENIO_DFLT_MAXY
-    type(ESMF_CoordSys_Flag) :: csys = GENIO_DFLT_CSYS
-    integer                  :: otyp = GENIO_DFLT_OTYP
+    real(ESMF_KIND_R8)         :: filv = GENIO_FILV
+    integer                    :: nx   = GENIO_DFLT_NX
+    integer                    :: ny   = GENIO_DFLT_NY
+    integer                    :: nz   = GENIO_DFLT_NZ
+    real(ESMF_KIND_R8)         :: minx = GENIO_DFLT_MINX
+    real(ESMF_KIND_R8)         :: maxx = GENIO_DFLT_MAXX
+    real(ESMF_KIND_R8)         :: miny = GENIO_DFLT_MINY
+    real(ESMF_KIND_R8)         :: maxy = GENIO_DFLT_MAXY
+    type(ESMF_CoordSys_Flag)   :: csys = GENIO_DFLT_CSYS
+    integer                    :: otyp = GENIO_DFLT_OTYP
+    type(ESMF_FileFormat_Flag) :: ffmt = ESMF_FILEFORMAT_ESMFMESH
   endtype genio_dflts
 
   type genio_fld
@@ -92,36 +93,27 @@ module genio_mod_struct
 
   type genio_geom
     character(len=64)        :: name = "uninitialized"
-    integer                  :: nx   = GENIO_DFLT_NX
-    integer                  :: ny   = GENIO_DFLT_NY
-    integer                  :: nz   = GENIO_DFLT_NZ
-    real(ESMF_KIND_R8)       :: minx = GENIO_DFLT_MINX
-    real(ESMF_KIND_R8)       :: maxx = GENIO_DFLT_MAXX
-    real(ESMF_KIND_R8)       :: miny = GENIO_DFLT_MINY
-    real(ESMF_KIND_R8)       :: maxy = GENIO_DFLT_MAXY
-    type(ESMF_CoordSys_Flag) :: csys = ESMF_COORDSYS_SPH_DEG
+    type(ESMF_Geom)          :: geom
     type(ESMF_GeomType_Flag) :: gtyp = ESMF_GEOMTYPE_GRID
-    type(ESMF_Grid)          :: grid
-    type(ESMF_Mesh)          :: mesh
   endtype genio_geom
 
   type genio_state
     ! component information
-    character(32)           :: cname      = "GENIO"
-    type(ESMF_HConfig)      :: dfltcfg
-    type(ESMF_HConfig)      :: outpcfg
-    type(ESMF_HConfig)      :: geomcfg
-    type(ESMF_HConfig)      :: flstcfg
-    integer                 :: verbosity  =  0
-    integer                 :: diagnostic =  0
-    integer                 :: myid       = -1
-    integer                 :: outid      =  0
-    type(ESMF_TimeInterval) :: zerotime
-    type(ESMF_VM)           :: vm
-    type(genio_geom)        :: geom
-    type(genio_srclst)      :: srclst
-    type(genio_outlst)      :: outlst
-    type(genio_dflts)       :: dflts
+    character(32)                 :: cname      = "GENIO"
+    type(ESMF_HConfig)            :: dfltcfg
+    type(ESMF_HConfig)            :: outpcfg
+    type(ESMF_HConfig)            :: geomcfg
+    type(ESMF_HConfig)            :: flstcfg
+    integer                       :: verbosity  =  0
+    integer                       :: diagnostic =  0
+    integer                       :: myid       = -1
+    integer                       :: outid      =  0
+    type(ESMF_TimeInterval)       :: zerotime
+    type(ESMF_VM)                 :: vm
+    type(genio_geom), allocatable :: geolst(:)
+    type(genio_srclst)            :: srclst
+    type(genio_outlst)            :: outlst
+    type(genio_dflts)             :: dflts
   endtype genio_state
 
   type geniostate_wrap

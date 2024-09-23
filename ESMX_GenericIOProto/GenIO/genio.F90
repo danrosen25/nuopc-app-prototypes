@@ -165,7 +165,7 @@ module genio
                     "defaultOptions", &  ! GenIO handled option
                     "outputOptions ", &  ! GenIO handled option
                     "fieldOptions  ", &  ! GenIO handled option
-                    "geomOptions   "  &  ! GenIO handled option
+                    "geomList      "  &  ! GenIO handled option
                    ], badKey=badKey, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return  ! bail out
@@ -185,7 +185,7 @@ module genio
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       geomcfg_p = ESMF_HConfigIsDefined(compcfg, &
-        keyString="geom", rc=rc)
+        keyString="geomList", rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
       flstcfg_p = ESMF_HConfigIsDefined(compcfg, &
@@ -221,7 +221,7 @@ module genio
     endif
     if (geomcfg_p) then
       geniostate%geomcfg = ESMF_HConfigCreateAt(compcfg, &
-        keyString="geom", rc=rc)
+        keyString="geomList", rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     else
@@ -338,8 +338,7 @@ module genio
       line=__LINE__, file=__FILE__)) return
 
     ! create defaults
-    geniostate%dflts = genio_dflts_create(geniostate%dfltcfg, &
-      rc=rc)
+    geniostate%dflts = genio_dflts_create(geniostate%dfltcfg, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     ! create source data state
@@ -348,7 +347,7 @@ module genio
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
     ! create geom object
-    geniostate%geom = genio_geom_create(geniostate%geomcfg, &
+    geniostate%geolst = genio_geolst_create(geniostate%geomcfg, &
       geniostate%dflts, rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
@@ -396,7 +395,7 @@ module genio
 
     ! write grid to NetCDF file
     if (btest(geniostate%diagnostic,16)) then
-      call genio_geom_write(geniostate%geom, rc=rc)
+      call genio_geolst_write(geniostate%geolst, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, file=__FILE__)) return
     endif
@@ -750,7 +749,7 @@ module genio
     call genio_fldlst_destroy(geniostate%srclst, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
-    call genio_geom_destroy(geniostate%geom, rc=rc)
+    call genio_geolst_destroy(geniostate%geolst, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 

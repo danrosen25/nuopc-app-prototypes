@@ -104,6 +104,10 @@ module genio_mod_defaults
       defaultValue=GENIO_DFLT_OTYP, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+    genio_dflts_create%ffmt = genio_hconfig2ffmt(dfltcfg, "fileformat", &
+      defaultValue=GENIO_DFLT_FFMT, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
   endfunction genio_dflts_create
 

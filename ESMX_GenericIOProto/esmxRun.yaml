@@ -43,6 +43,18 @@ IO:
   fieldOptions:
     precipitation_flux: {outputType: accm}
     sea_surface_temperature: {outputType: mean}
+  geomList:
+    - name: ODataGrid
+      geomtype: ESMF_GEOMTYPE_GRID
+      coordSys: ESMF_COORDSYS_CART
+      maxIndex: [10, 10]
+      minCornerCoord: [10., 20.]
+      maxCornerCoord: [100., 200.]
+    - name: ODataMesh
+      geomtype: ESMF_GEOMTYPE_MESH
+      coordSys: ESMF_COORDSYS_SPH_DEG
+      filename: ll1deg.scrip.nc
+      fileformat: ESMF_FILEFORMAT_SCRIP
 
 ####################
 # Other Components #

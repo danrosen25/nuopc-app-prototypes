@@ -42,6 +42,7 @@ module genio_mod_params
   public GENIO_DFLT_MAXY
   public GENIO_DFLT_CSYS
   public GENIO_DFLT_OTYP
+  public GENIO_DFLT_FFMT
 
   ! parameters
   integer, parameter :: &
@@ -73,5 +74,7 @@ module genio_mod_params
     GENIO_DFLT_CSYS = ESMF_COORDSYS_SPH_DEG
   integer, parameter :: &
     GENIO_DFLT_OTYP = GENIO_INST
+  type(ESMF_FileFormat_Flag), parameter :: &
+    GENIO_DFLT_FFMT = ESMF_FILEFORMAT_ESMFMESH
 
 endmodule genio_mod_params
