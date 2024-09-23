@@ -25,7 +25,10 @@ module genatm
 
   public SetVM, SetServices
 
-  real(ESMF_KIND_R8) :: increment = 1
+  real(ESMF_KIND_R8)      :: increment = 1
+  integer                 :: slice     = 0
+  character(*), parameter :: filename  = "ATMOutLst.nc"
+  logical                 :: output    = .false.
 
   !-----------------------------------------------------------------------------
   contains
@@ -41,6 +44,7 @@ module genatm
     character(80)             :: compLabel
     character(:), allocatable :: badKey
     logical                   :: isFlag
+
     rc = ESMF_SUCCESS
 
     ! derive from NUOPC_Model
@@ -93,7 +97,8 @@ module genatm
         vocabulary=["model        ", &  ! ESMX handled option
                     "petList      ", &  ! ESMX handled option
                     "ompNumThreads", &  ! ESMX handled option
-                    "attributes   "  &  ! ESMX handled option
+                    "attributes   ", &  ! ESMX handled option
+                    "output       "  &  ! Custom option
                    ], badKey=badKey, rc=rc)
       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
         line=__LINE__, &
@@ -108,6 +113,10 @@ module genatm
         return
       endif
     endif
+
+    output = ESMF_HConfigAsLogical(hconfigNode, keyString="output", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
 
   end subroutine
 
@@ -139,11 +148,13 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
+#ifdef WITHLOCSTREAM
     ! exportable field: surface_net_downward_shortwave_flux
     call NUOPC_Advertise(exportState, &
       StandardName="surface_net_downward_shortwave_flux", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+#endif
 
   end subroutine
 
@@ -265,6 +276,7 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
+#ifdef WITHLOCSTREAM
     ! exportable field on LocStream: surface_net_downward_shortwave_flux
     field = ESMF_FieldCreate(name="surface_net_downward_shortwave_flux", &
       locstream=locsOut, typekind=ESMF_TYPEKIND_R8, rc=rc)
@@ -282,6 +294,7 @@ module genatm
       mask(i)=0
       fptrR8D1(i)=0.d0
     enddo
+#endif
 
   end subroutine
 
@@ -330,6 +343,7 @@ module genatm
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
 
+#ifdef WITHLOCSTREAM
     ! exportable field on LocStream: surface_net_downward_shortwave_flux
     call ESMF_StateGet(exportState, field=field, &
       itemName="surface_net_downward_shortwave_flux", rc=rc)
@@ -346,6 +360,7 @@ module genatm
     call NUOPC_SetAttribute(field, name="Updated", value="true", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, file=__FILE__)) return
+#endif
 
     call NUOPC_SetTimestamp(exportState, clock=modelClock, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -444,6 +459,7 @@ module genatm
       line=__LINE__, file=__FILE__)) return
     fptrR8D1 = fptrR8D1 + increment
 
+#ifdef WITHLOCSTREAM
     ! exportable field on LocStream: surface_net_downward_shortwave_flux
     call ESMF_StateGet(exportState, field=field, &
       itemName="surface_net_downward_shortwave_flux", rc=rc)
@@ -457,10 +473,91 @@ module genatm
     do i=clb(1),cub(1)
       fptrR8D1(i)=fptrR8D1(i)+1.0d0
     enddo
+#endif
+
+    call ESMF_VMWtimeDelay(delay=1.5_ESMF_KIND_R8, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    if (output) then
+      call atm_export_write(model, rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+        line=__LINE__, file=__FILE__)) return
+    endif
 
   end subroutine
 
   !-----------------------------------------------------------------------------
+
+  subroutine atm_export_write(model, rc)
+    type(ESMF_GridComp)  :: model
+    integer, intent(out) :: rc
+
+    ! local variables
+    type(ESMF_Clock)            :: clock
+    type(ESMF_State)            :: exportState
+    type(ESMF_Time)             :: currTime
+    type(ESMF_TimeInterval)     :: timeStep
+    type(ESMF_VM)               :: vm
+    type(ESMF_Field)            :: field
+    type(ESMF_FieldBundle)      :: fb
+
+    rc = ESMF_SUCCESS
+
+    ! query for clock and exportState
+    call NUOPC_ModelGet(model, modelClock=clock, &
+      exportState=exportState, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! Query for VM
+    call ESMF_GridCompGet(model, vm=vm, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    fb = ESMF_FieldBundleCreate(rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! exportable field on Grid: air_pressure_at_sea_level
+    call ESMF_StateGet(exportState, field=field, &
+      itemName="air_pressure_at_sea_level", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldBundleAdd(fb, fieldList=(/field/), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+    ! exportable field on Mesh: precipitation_flux
+    call ESMF_StateGet(exportState, field=field, &
+      itemName="precipitation_flux", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldBundleAdd(fb, fieldList=(/field/), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+#ifdef WITHLOCSTREAM
+    ! exportable field on LocStream: surface_net_downward_shortwave_flux
+    call ESMF_StateGet(exportState, field=field, &
+      itemName="surface_net_downward_shortwave_flux", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldBundleAdd(fb, fieldList=(/field/), rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+#endif
+
+    slice = slice + 1
+    call ESMF_FieldBundleWrite(fb, fileName=filename, &
+      overwrite=.true., timeslice=slice, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+    call ESMF_FieldBundleDestroy(fb, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, file=__FILE__)) return
+
+  endsubroutine atm_export_write
 
 end module
 

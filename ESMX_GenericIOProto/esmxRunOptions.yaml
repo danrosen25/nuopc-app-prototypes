@@ -23,7 +23,7 @@ ESMX:
 
 IO:
   model:            GenIO
-  petList:          [2-3]
+  petList:          [3-3]
   attributes:
     Verbosity:  low
     Diagnostic: 0
@@ -35,14 +35,17 @@ IO:
     writeSrc: false
     writeFinal: false
     frequency: 0000-00-00T00:30:00
-    fieldset: [air_pressure_at_sea_level,
+    fieldset: [
+               air_pressure_at_sea_level,
                precipitation_flux,
 #               surface_net_downward_shortwave_flux,
-               sea_surface_temperature
+               sea_surface_temperature,
+               sea_surface_salinity
               ]
   fieldOptions:
     precipitation_flux: {outputType: accm}
     sea_surface_temperature: {outputType: mean}
+    sea_surface_salinity: {outputType: inst}
   geomList:
     - name: ODataGrid
       geomtype: ESMF_GEOMTYPE_GRID
@@ -68,6 +71,7 @@ ATM:
     Verbosity:  0
     Diagnostic: 0
   petList:          [0-1]
+  output: false
 
 # Ocean Component (ESMX Data)
 
@@ -87,5 +91,6 @@ OCN:
     coordSys: ESMF_COORDSYS_CART
   exportFields:
     sea_surface_temperature: {dim: 2, val: 293.15}
+    sea_surface_salinity: {dim: 2, val: 33}
   output:
     write_final: false

@@ -39,7 +39,7 @@ $(EXE):
 # -----------------------------------------------------------------------------
 .PHONY: dust clean distclean info run
 dust:
-	rm -f PET*.ESMF_LogFile *.stdout IOOutLst.nc IOSrcList.nc ODataGrid.nc diagnostic_*.nc
+	rm -f PET*.ESMF_LogFile *.stdout IOOutLst.nc IOSrcList.nc ODataGrid.nc ATMOutLst.nc diagnostic_*.nc
 clean:
 	rm -rf build install
 distclean: dust clean
@@ -51,5 +51,11 @@ info:
 	@cat $(ESMFMKFILE)
 	@echo ==================================================================
 
-run:
-	$(ESMF_INTERNAL_MPIRUN) -np 4 ./$(EXE)
+runInternal:
+	$(ESMF_INTERNAL_MPIRUN) -np 4 ./$(EXE) esmxRunInternal.yaml
+
+runBasic:
+	$(ESMF_INTERNAL_MPIRUN) -np 4 ./$(EXE) esmxRunBasic.yaml
+
+runOptions:
+	$(ESMF_INTERNAL_MPIRUN) -np 4 ./$(EXE) esmxRunOptions.yaml

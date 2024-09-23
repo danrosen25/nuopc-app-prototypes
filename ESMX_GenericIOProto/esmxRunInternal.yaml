@@ -1,0 +1,32 @@
+ESMX:
+
+  App:
+    globalResourceControl:  true
+    logKindFlag:            ESMF_LOGKIND_Multi
+    logAppendFlag:          false
+    logFlush:               true
+    startTime:              2012-10-24T18:00:00
+    stopTime:               2012-10-24T19:00:00
+
+  Driver:
+    componentList:          [ATM]
+    attributes:
+      Verbosity: low
+    runSequence: |
+      @900
+        ATM
+      @
+
+####################
+# Other Components #
+####################
+
+# Atmospheric Component (Generic ATM)
+
+ATM:
+  model:            GenATM
+  attributes:
+    Verbosity:  0
+    Diagnostic: 0
+  petList:          [0-1]
+  output: true
