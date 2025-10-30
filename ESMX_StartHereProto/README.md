@@ -32,7 +32,8 @@ Files and sub-directories that implement the fundamental concepts demonstrated b
 
 Files that are needed for the integration into ESMF's automated testing infrastructure for regression testing. These artifacts might be interesting to look at, but generally should *not* be used as patterns to follow in actual projects.
 
-- `Makefile`        - GNU Makefile that defines targets that are used by the automated ESMF regression testing script.
+- `Makefile`                     - GNU Makefile that defines targets that are used by the automated ESMF regression testing script.
+- `ESMX_StartHereTutorial.ipynb` - Jupyter Notebook based tutorial featuring a step-by-step introduction to ESMX.
 
 ### Usage
 
