@@ -1,4 +1,5 @@
 NUOPC-PROTO-RESULTS
+.ipynb_checkpoints
 AsyncIOBlockingProto/PET0.ESMF_LogFile
 AsyncIOBlockingProto/PET1.ESMF_LogFile
 AsyncIOBlockingProto/PET2.ESMF_LogFile
