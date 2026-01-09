@@ -1,0 +1,6 @@
+application:
+  exe_name: example.exe
+
+components:
+  CompO:
+  CompA:

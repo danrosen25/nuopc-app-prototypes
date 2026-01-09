@@ -1,0 +1,34 @@
+attributes: &common
+  Verbosity:  high 
+
+ESMX:
+
+  App:
+    logKindFlag:            ESMF_LOGKIND_Multi
+    logFlush:               true
+    startTime:              2012-10-24T18:00:00
+    stopTime:               2012-10-24T19:00:00
+
+  Driver:
+    componentList:          [C1, C2]
+    attributes:
+      Verbosity:  low
+    runSequence: |
+      @900
+        C1 -> C2
+        C2 -> C1
+        C1
+        C2
+      @
+
+C1:
+  model:            CompA
+  petList:          [0]
+  attributes:
+    <<: *common
+
+C2:
+  model:            CompO
+  petList:          [1]
+  attributes:
+    <<: *common
